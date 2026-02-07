@@ -5,14 +5,14 @@
 ## 特徴
 
 - **自然言語入力**: 「右45度旋回」「前進10メートル」「発射」などの日本語コマンドで操作
-- **Claude API統合**: LLMが自然言語を構造化コマンドに変換
+- **Gemini API統合**: Google Gemini LLMが自然言語を構造化コマンドに変換
 - **複合コマンド対応**: 「右60度旋回して30m前進、砲塔を左に向けて発射」など
 - **マルチプレイヤー準備**: オンライン対戦に対応できるアーキテクチャ
 
 ## 必要条件
 
 - Node.js 18以上
-- Claude API Key（オプション - なくてもモックパーサーで動作）
+- Google Gemini API Key（オプション - なくてもモックパーサーで動作）
 
 ## セットアップ
 
@@ -22,8 +22,8 @@ npm install
 
 # 環境変数の設定（オプション）
 cp .env.example .env
-# .envファイルを編集してClaude APIキーを設定
-# VITE_CLAUDE_API_KEY=your_api_key_here
+# .envファイルを編集してGemini APIキーを設定
+# VITE_GEMINI_API_KEY=your_api_key_here
 
 # 開発サーバー起動
 npm run dev
@@ -79,8 +79,8 @@ src/
 │   ├── CommandExecutor.ts
 │   └── handlers/        # 各コマンドハンドラ
 ├── ai/                  # LLM統合
-│   ├── ClaudeParser.ts  # Claude API
-│   └── commandSchema.ts # スキーマ定義
+│   ├── GeminiParser.ts  # Google Gemini API / MockParser
+│   └── commandSchema.ts # スキーマ定義・システムプロンプト
 └── network/             # ネットワーク（マルチプレイヤー準備）
     ├── NetworkManager.ts
     ├── LocalAdapter.ts
@@ -92,7 +92,7 @@ src/
 - **ゲームエンジン**: Phaser 3 + Matter.js
 - **言語**: TypeScript
 - **ビルド**: Vite
-- **LLM**: Claude API（Anthropic）
+- **LLM**: Google Gemini API（`gemini-3-flash-preview`）
 - **将来のマルチプレイヤー**: Colyseus
 
 ## 開発
@@ -117,7 +117,7 @@ npm run preview
 
 ### コマンドシステム
 1. ユーザーがテキスト入力
-2. Claude APIが構造化コマンドに変換
+2. Gemini APIが構造化コマンドに変換
 3. CommandQueueに追加
 4. CommandExecutorが毎フレーム処理
 5. 各Handlerがアニメーション付きで実行
