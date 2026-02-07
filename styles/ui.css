@@ -1,0 +1,246 @@
+/* Tank Commander UI Styles */
+
+/* Common panel styles */
+.ui-panel {
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid #4a4a4a;
+  border-radius: 8px;
+  padding: 12px;
+  color: #ffffff;
+  font-family: 'Courier New', monospace;
+}
+
+.ui-panel h3,
+.ui-panel h4 {
+  margin: 0 0 10px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #4a4a4a;
+  color: #4caf50;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Status display (top right) */
+#status-display {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 220px;
+  z-index: 100;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.status-row span:first-child {
+  color: #888;
+}
+
+.status-row span:last-child {
+  color: #fff;
+  font-weight: bold;
+}
+
+.status-row span.executing {
+  color: #4caf50;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+#health-bar {
+  width: 100px;
+  height: 14px;
+  background: #333;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #555;
+}
+
+#health-fill {
+  height: 100%;
+  background: #4caf50;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+/* Command history (bottom left) */
+#command-history {
+  position: fixed;
+  bottom: 120px;
+  left: 20px;
+  width: 400px;
+  max-height: 250px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+#history-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.history-entry {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  border-left: 3px solid #4a4a4a;
+}
+
+.history-entry.success {
+  border-left-color: #4caf50;
+}
+
+.history-entry.error {
+  border-left-color: #f44336;
+}
+
+.history-input {
+  color: #4caf50;
+  margin-bottom: 2px;
+}
+
+.history-result {
+  color: #888;
+  font-size: 10px;
+}
+
+/* Command input (bottom center) */
+#command-input-container {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  z-index: 100;
+}
+
+.command-prompt {
+  display: flex;
+  background: rgba(0, 0, 0, 0.9);
+  border: 2px solid #4caf50;
+  border-radius: 8px;
+  padding: 10px 15px;
+  align-items: center;
+  box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+}
+
+.prompt-symbol {
+  color: #4caf50;
+  font-family: 'Courier New', monospace;
+  font-size: 20px;
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+#command-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  outline: none;
+  padding: 5px;
+}
+
+#command-input::placeholder {
+  color: #666;
+}
+
+#command-input:disabled {
+  opacity: 0.5;
+}
+
+#submit-command {
+  background: #4caf50;
+  border: none;
+  color: #000;
+  padding: 8px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  font-size: 12px;
+  text-transform: uppercase;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+#submit-command:hover {
+  background: #66bb6a;
+}
+
+#submit-command:active {
+  transform: scale(0.98);
+}
+
+#submit-command:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
+#interpretation-display {
+  margin-top: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  color: #888;
+  text-align: center;
+  min-height: 20px;
+}
+
+#interpretation-display.parsing {
+  color: #ffeb3b;
+}
+
+#interpretation-display.success {
+  color: #4caf50;
+}
+
+#interpretation-display.error {
+  color: #f44336;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #222;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+/* Responsive adjustments */
+@media (max-width: 800px) {
+  #command-input-container {
+    width: 90%;
+  }
+
+  #command-history {
+    width: 300px;
+  }
+
+  #status-display {
+    width: 180px;
+  }
+}
