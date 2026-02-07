@@ -35,6 +35,9 @@ export const PHYSICS_CONSTANTS = {
   WORLD_WIDTH: 1600,
   WORLD_HEIGHT: 1200,
   PIXELS_PER_METER: 32, // For distance calculations
+
+  // Camera
+  CAMERA_SCROLL_SPEED: 400, // pixels per second in free scroll mode
 } as const;
 
 export const GAME_CONFIG = {

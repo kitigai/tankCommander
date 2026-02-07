@@ -14,6 +14,12 @@ interface MoveState {
 }
 
 export class MoveHandler implements CommandHandler<MoveCommand> {
+  // World boundary limits considering tank size
+  private readonly minX = PHYSICS_CONSTANTS.TANK_WIDTH / 2;
+  private readonly maxX = PHYSICS_CONSTANTS.WORLD_WIDTH - PHYSICS_CONSTANTS.TANK_WIDTH / 2;
+  private readonly minY = PHYSICS_CONSTANTS.TANK_HEIGHT / 2;
+  private readonly maxY = PHYSICS_CONSTANTS.WORLD_HEIGHT - PHYSICS_CONSTANTS.TANK_HEIGHT / 2;
+
   execute(
     command: MoveCommand,
     tank: TankState,
@@ -47,8 +53,8 @@ export class MoveHandler implements CommandHandler<MoveCommand> {
 
     if (remaining <= maxMove) {
       // Complete the movement
-      const finalX = tank.x + moveX * remaining;
-      const finalY = tank.y + moveY * remaining;
+      const finalX = this.clampX(tank.x + moveX * remaining);
+      const finalY = this.clampY(tank.y + moveY * remaining);
       return {
         completed: true,
         stateUpdates: { x: finalX, y: finalY },
@@ -56,8 +62,19 @@ export class MoveHandler implements CommandHandler<MoveCommand> {
     }
 
     // Partial movement
-    const newX = tank.x + moveX * maxMove;
-    const newY = tank.y + moveY * maxMove;
+    const rawX = tank.x + moveX * maxMove;
+    const rawY = tank.y + moveY * maxMove;
+    const newX = this.clampX(rawX);
+    const newY = this.clampY(rawY);
+
+    // If clamped (hit world boundary), stop movement
+    if (newX !== rawX || newY !== rawY) {
+      return {
+        completed: true,
+        stateUpdates: { x: newX, y: newY },
+      };
+    }
+
     state.moved += maxMove;
     commandQueue.setExecutionState(command.id, state);
 
@@ -65,5 +82,13 @@ export class MoveHandler implements CommandHandler<MoveCommand> {
       completed: false,
       stateUpdates: { x: newX, y: newY },
     };
+  }
+
+  private clampX(x: number): number {
+    return Math.max(this.minX, Math.min(this.maxX, x));
+  }
+
+  private clampY(y: number): number {
+    return Math.max(this.minY, Math.min(this.maxY, y));
   }
 }

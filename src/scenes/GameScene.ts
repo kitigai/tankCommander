@@ -10,6 +10,11 @@ import { Projectile } from '../entities/Projectile';
 import { Obstacle } from '../entities/Obstacle';
 import { PHYSICS_CONSTANTS } from '../config/constants';
 
+enum CameraMode {
+  Follow = 'follow',
+  FreeScroll = 'freeScroll',
+}
+
 export class GameScene extends Phaser.Scene {
   private gameState!: GameState;
   private commandExecutor!: CommandExecutor;
@@ -18,6 +23,13 @@ export class GameScene extends Phaser.Scene {
   private obstacles: Map<string, Obstacle> = new Map();
   private worldBoundsGraphics!: Phaser.GameObjects.Graphics;
   private gridGraphics!: Phaser.GameObjects.Graphics;
+
+  // Camera scroll
+  private cameraMode: CameraMode = CameraMode.Follow;
+  private cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private spaceKey!: Phaser.Input.Keyboard.Key;
+  private freeScrollX: number = 0;
+  private freeScrollY: number = 0;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -51,6 +63,9 @@ export class GameScene extends Phaser.Scene {
 
     // Set up camera
     this.setupCamera();
+
+    // Set up keyboard input for camera scrolling
+    this.setupKeyboardInput();
   }
 
   private drawWorld(): void {
@@ -131,6 +146,85 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private setupKeyboardInput(): void {
+    if (!this.input.keyboard) return;
+
+    this.cursorKeys = this.input.keyboard.createCursorKeys();
+    this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+    this.spaceKey.on('down', () => {
+      if (this.isTextInputFocused()) return;
+      this.toggleCameraMode();
+    });
+
+    // Dynamically enable/disable key capture based on text input focus.
+    // When the input is focused, Phaser should not capture these keys
+    // so they work normally for text editing.
+    const commandInput = document.getElementById('command-input');
+    if (commandInput) {
+      commandInput.addEventListener('focus', () => {
+        this.input.keyboard?.removeCapture([37, 38, 39, 40, 32]);
+      });
+      commandInput.addEventListener('blur', () => {
+        this.input.keyboard?.addCapture([37, 38, 39, 40, 32]);
+      });
+    }
+    // Input starts focused (UIScene calls commandInput.focus()), so start without capture
+    this.input.keyboard.removeCapture([37, 38, 39, 40, 32]);
+  }
+
+  private isTextInputFocused(): boolean {
+    const activeElement = document.activeElement;
+    return activeElement instanceof HTMLInputElement ||
+           activeElement instanceof HTMLTextAreaElement;
+  }
+
+  private toggleCameraMode(): void {
+    if (this.cameraMode === CameraMode.Follow) {
+      const camera = this.cameras.main;
+      this.freeScrollX = camera.scrollX + camera.width / 2;
+      this.freeScrollY = camera.scrollY + camera.height / 2;
+      this.cameraMode = CameraMode.FreeScroll;
+    } else {
+      this.cameraMode = CameraMode.Follow;
+    }
+    this.events.emit('cameraModeChanged', this.cameraMode);
+  }
+
+  private handleFreeScroll(delta: number): void {
+    if (this.cameraMode !== CameraMode.FreeScroll) return;
+    if (this.isTextInputFocused()) return;
+
+    const speed = PHYSICS_CONSTANTS.CAMERA_SCROLL_SPEED * (delta / 1000);
+
+    if (this.cursorKeys.left.isDown) {
+      this.freeScrollX -= speed;
+    }
+    if (this.cursorKeys.right.isDown) {
+      this.freeScrollX += speed;
+    }
+    if (this.cursorKeys.up.isDown) {
+      this.freeScrollY -= speed;
+    }
+    if (this.cursorKeys.down.isDown) {
+      this.freeScrollY += speed;
+    }
+
+    const camera = this.cameras.main;
+    const halfW = camera.width / 2;
+    const halfH = camera.height / 2;
+    this.freeScrollX = Phaser.Math.Clamp(
+      this.freeScrollX,
+      halfW,
+      PHYSICS_CONSTANTS.WORLD_WIDTH - halfW
+    );
+    this.freeScrollY = Phaser.Math.Clamp(
+      this.freeScrollY,
+      halfH,
+      PHYSICS_CONSTANTS.WORLD_HEIGHT - halfH
+    );
+  }
+
   update(_time: number, delta: number): void {
     if (this.gameState.getState().phase !== 'playing') return;
 
@@ -143,7 +237,10 @@ export class GameScene extends Phaser.Scene {
     // Sync entities with state
     this.syncEntities();
 
-    // Update camera to follow player
+    // Handle free scroll input
+    this.handleFreeScroll(delta);
+
+    // Update camera (respects camera mode)
     this.updateCamera();
 
     // Check collisions
@@ -218,10 +315,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateCamera(): void {
-    const playerTank = this.gameState.getTank('player');
-    if (playerTank) {
-      // Smooth camera follow
-      this.cameras.main.centerOn(playerTank.x, playerTank.y);
+    if (this.cameraMode === CameraMode.FreeScroll) {
+      this.cameras.main.centerOn(this.freeScrollX, this.freeScrollY);
+    } else {
+      const playerTank = this.gameState.getTank('player');
+      if (playerTank) {
+        this.cameras.main.centerOn(playerTank.x, playerTank.y);
+      }
     }
   }
 

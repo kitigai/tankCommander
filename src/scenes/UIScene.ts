@@ -54,6 +54,10 @@ export class UIScene extends Phaser.Scene {
     // Subscribe to state changes for status updates
     this.gameState.subscribe(this.updateStatusDisplay.bind(this));
 
+    // Listen for camera mode changes from GameScene
+    const gameScene = this.scene.get('GameScene');
+    gameScene.events.on('cameraModeChanged', this.updateCameraModeDisplay.bind(this));
+
     // Initial status update
     this.updateStatusDisplay(this.gameState.getState());
   }
@@ -86,6 +90,14 @@ export class UIScene extends Phaser.Scene {
         <div class="status-row">
           <span>Commands:</span>
           <span id="status-queue">0</span>
+        </div>
+        <div class="status-row">
+          <span>Camera:</span>
+          <span id="status-camera-mode">FOLLOW</span>
+        </div>
+        <div class="status-row camera-hint">
+          <span></span>
+          <span id="camera-hint">[Space] to toggle</span>
         </div>
       </div>
 
@@ -246,6 +258,19 @@ export class UIScene extends Phaser.Scene {
       const queueLength = this.commandExecutor.getQueueLength('player');
       queueEl.textContent = queueLength.toString();
       queueEl.className = queueLength > 0 ? 'executing' : '';
+    }
+  }
+
+  private updateCameraModeDisplay(mode: string): void {
+    const cameraModeEl = document.getElementById('status-camera-mode');
+    if (cameraModeEl) {
+      if (mode === 'freeScroll') {
+        cameraModeEl.textContent = 'FREE SCROLL';
+        cameraModeEl.style.color = '#ffeb3b';
+      } else {
+        cameraModeEl.textContent = 'FOLLOW';
+        cameraModeEl.style.color = '#fff';
+      }
     }
   }
 
