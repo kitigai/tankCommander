@@ -9,6 +9,11 @@ import { Tank } from '../entities/Tank';
 import { Projectile } from '../entities/Projectile';
 import { Obstacle } from '../entities/Obstacle';
 import { PHYSICS_CONSTANTS } from '../config/constants';
+import { getStage, StageConfig } from '../config/stages';
+
+interface GameSceneData {
+  stageId?: string;
+}
 
 enum CameraMode {
   Follow = 'follow',
@@ -24,6 +29,9 @@ export class GameScene extends Phaser.Scene {
   private worldBoundsGraphics!: Phaser.GameObjects.Graphics;
   private gridGraphics!: Phaser.GameObjects.Graphics;
 
+  // Stage config (undefined = Practice Mode)
+  private stageConfig: StageConfig | undefined;
+
   // Camera scroll
   private cameraMode: CameraMode = CameraMode.Follow;
   private cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -33,6 +41,10 @@ export class GameScene extends Phaser.Scene {
 
   constructor() {
     super({ key: 'GameScene' });
+  }
+
+  init(data: GameSceneData): void {
+    this.stageConfig = data?.stageId ? getStage(data.stageId) : undefined;
   }
 
   create(): void {
@@ -93,12 +105,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createPlayerTank(): void {
-    const tankState = createInitialTankState(
-      'player',
-      'player',
-      PHYSICS_CONSTANTS.WORLD_WIDTH / 2,
-      PHYSICS_CONSTANTS.WORLD_HEIGHT / 2
-    );
+    const spawnX = this.stageConfig?.playerSpawn.x ?? PHYSICS_CONSTANTS.WORLD_WIDTH / 2;
+    const spawnY = this.stageConfig?.playerSpawn.y ?? PHYSICS_CONSTANTS.WORLD_HEIGHT / 2;
+
+    const tankState = createInitialTankState('player', 'player', spawnX, spawnY);
 
     this.gameState.addTank(tankState);
 
@@ -107,7 +117,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createObstacles(): void {
-    const obstacleConfigs = [
+    const obstacleConfigs = this.stageConfig?.obstacles ?? [
       { x: 400, y: 300, width: 80, height: 80, destructible: true },
       { x: 1200, y: 400, width: 80, height: 80, destructible: true },
       { x: 800, y: 200, width: 120, height: 60, destructible: false },

@@ -3,13 +3,15 @@
 import Phaser from 'phaser';
 import { phaserConfig } from './config/game.config';
 import { BootScene } from './scenes/BootScene';
+import { MenuScene } from './scenes/MenuScene';
+import { StageSelectScene } from './scenes/StageSelectScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
 
 // Add scenes to config
 const config: Phaser.Types.Core.GameConfig = {
   ...phaserConfig,
-  scene: [BootScene, GameScene, UIScene],
+  scene: [BootScene, MenuScene, StageSelectScene, GameScene, UIScene],
 };
 
 // Initialize game
