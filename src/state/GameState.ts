@@ -109,6 +109,19 @@ export class GameState {
     this.notifyListeners();
   }
 
+  updateObstacle(id: string, updates: Partial<ObstacleData>): void {
+    const obstacle = this.data.obstacles.find((o) => o.id === id);
+    if (obstacle) {
+      Object.assign(obstacle, updates);
+      this.notifyListeners();
+    }
+  }
+
+  removeObstacle(id: string): void {
+    this.data.obstacles = this.data.obstacles.filter((o) => o.id !== id);
+    this.notifyListeners();
+  }
+
   // Tick management
   incrementTick(): void {
     this.data.tick++;

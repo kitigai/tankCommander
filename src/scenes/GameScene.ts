@@ -31,6 +31,8 @@ export class GameScene extends Phaser.Scene {
 
   // Stage config (undefined = Practice Mode)
   private stageConfig: StageConfig | undefined;
+  private stageClearShown: boolean = false;
+  private stageClearOverlay: HTMLDivElement | null = null;
 
   // Camera scroll
   private cameraMode: CameraMode = CameraMode.Follow;
@@ -78,6 +80,13 @@ export class GameScene extends Phaser.Scene {
 
     // Set up keyboard input for camera scrolling
     this.setupKeyboardInput();
+
+    // Reset stage clear state
+    this.stageClearShown = false;
+    this.stageClearOverlay = null;
+
+    // Register shutdown cleanup
+    this.events.on('shutdown', this.shutdown, this);
   }
 
   private drawWorld(): void {
@@ -255,6 +264,9 @@ export class GameScene extends Phaser.Scene {
 
     // Check collisions
     this.checkCollisions();
+
+    // Check stage clear condition (arcade mode only)
+    this.checkStageClear();
   }
 
   private updateProjectiles(delta: number): void {
@@ -322,6 +334,23 @@ export class GameScene extends Phaser.Scene {
         this.projectiles.delete(id);
       }
     }
+
+    // Sync obstacles (ダメージによる見た目更新)
+    const currentObstacleIds = new Set(state.obstacles.map((o) => o.id));
+    for (const obstacleData of state.obstacles) {
+      const obstacle = this.obstacles.get(obstacleData.id);
+      if (obstacle) {
+        obstacle.syncWithState(obstacleData);
+      }
+    }
+
+    // stateから消えた障害物のエンティティを破棄
+    for (const [id, obstacle] of this.obstacles) {
+      if (!currentObstacleIds.has(id)) {
+        obstacle.destroy();
+        this.obstacles.delete(id);
+      }
+    }
   }
 
   private updateCamera(): void {
@@ -375,7 +404,17 @@ export class GameScene extends Phaser.Scene {
           projectile.y < obstacle.y + obstacle.height / 2
         ) {
           this.gameState.removeProjectile(projectileId);
-          // Could add obstacle damage here if destructible
+
+          // 破壊可能な障害物にダメージを与える
+          if (obstacle.destructible && obstacle.health !== undefined) {
+            const newHealth = Math.max(0, obstacle.health - projectile.damage);
+            if (newHealth <= 0) {
+              this.gameState.removeObstacle(obstacle.id);
+            } else {
+              this.gameState.updateObstacle(obstacle.id, { health: newHealth });
+            }
+          }
+          break; // 1砲弾は1障害物にのみヒット
         }
       }
     }
@@ -383,5 +422,44 @@ export class GameScene extends Phaser.Scene {
 
   private onStateChange(_state: Readonly<ReturnType<GameState['getState']>>): void {
     // Handle state changes if needed (e.g., game over)
+  }
+
+  private checkStageClear(): void {
+    if (!this.stageConfig || this.stageClearShown) return;
+
+    const state = this.gameState.getState();
+    const hasDestructible = state.obstacles.some((o) => o.destructible);
+
+    if (!hasDestructible) {
+      this.stageClearShown = true;
+      this.gameState.setPhase('ended');
+      this.showStageClearUI();
+    }
+  }
+
+  private showStageClearUI(): void {
+    this.stageClearOverlay = document.createElement('div');
+    this.stageClearOverlay.id = 'stage-clear-ui';
+    this.stageClearOverlay.innerHTML = `
+      <div id="stage-clear-panel">
+        <h1 id="stage-clear-title">STAGE CLEAR!</h1>
+        <div id="stage-clear-buttons">
+          <button class="menu-btn" id="btn-clear-menu">メニューに戻る</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(this.stageClearOverlay);
+
+    document.getElementById('btn-clear-menu')!.addEventListener('click', () => {
+      this.scene.stop('UIScene');
+      this.scene.start('MenuScene');
+    });
+  }
+
+  shutdown(): void {
+    if (this.stageClearOverlay?.parentNode) {
+      this.stageClearOverlay.parentNode.removeChild(this.stageClearOverlay);
+      this.stageClearOverlay = null;
+    }
   }
 }
