@@ -10,6 +10,7 @@ import { Projectile } from '../entities/Projectile';
 import { Obstacle } from '../entities/Obstacle';
 import { PHYSICS_CONSTANTS } from '../config/constants';
 import { getStage, StageConfig } from '../config/stages';
+import { EnemyAI } from '../ai/EnemyAI';
 
 interface GameSceneData {
   stageId?: string;
@@ -33,6 +34,10 @@ export class GameScene extends Phaser.Scene {
   private stageConfig: StageConfig | undefined;
   private stageClearShown: boolean = false;
   private stageClearOverlay: HTMLDivElement | null = null;
+
+  // Enemy AI
+  private enemyAIs: EnemyAI[] = [];
+  private enemyTankIds: string[] = [];
 
   // Camera scroll
   private cameraMode: CameraMode = CameraMode.Follow;
@@ -63,6 +68,9 @@ export class GameScene extends Phaser.Scene {
     // Create some obstacles
     this.createObstacles();
 
+    // Create enemy tanks (if stage defines them)
+    this.createEnemyTanks();
+
     // Subscribe to state changes
     this.gameState.subscribe(this.onStateChange.bind(this));
 
@@ -84,6 +92,8 @@ export class GameScene extends Phaser.Scene {
     // Reset stage clear state
     this.stageClearShown = false;
     this.stageClearOverlay = null;
+    this.enemyAIs = [];
+    this.enemyTankIds = [];
 
     // Register shutdown cleanup
     this.events.on('shutdown', this.shutdown, this);
@@ -145,6 +155,29 @@ export class GameScene extends Phaser.Scene {
 
       const obstacleEntity = new Obstacle(this, obstacleData);
       this.obstacles.set(obstacleData.id, obstacleEntity);
+    });
+  }
+
+  private createEnemyTanks(): void {
+    const enemies = this.stageConfig?.enemies;
+    if (!enemies || enemies.length === 0) return;
+
+    enemies.forEach((enemyConfig, index) => {
+      const enemyId = `enemy_${index}`;
+      const tankState = createInitialTankState(enemyId, 'ai', enemyConfig.x, enemyConfig.y, {
+        bodyAngle: enemyConfig.bodyAngle,
+        health: enemyConfig.health,
+        maxHealth: enemyConfig.health,
+      });
+
+      this.gameState.addTank(tankState);
+      this.enemyTankIds.push(enemyId);
+
+      const tankEntity = new Tank(this, enemyId, tankState, false);
+      this.tanks.set(enemyId, tankEntity);
+
+      const ai = new EnemyAI(enemyId, this.gameState, enemyConfig.behavior);
+      this.enemyAIs.push(ai);
     });
   }
 
@@ -249,6 +282,11 @@ export class GameScene extends Phaser.Scene {
 
     // Process commands
     this.commandExecutor.processTick(delta);
+
+    // Update enemy AI
+    for (const ai of this.enemyAIs) {
+      ai.update(delta);
+    }
 
     // Update projectiles
     this.updateProjectiles(delta);
@@ -428,9 +466,20 @@ export class GameScene extends Phaser.Scene {
     if (!this.stageConfig || this.stageClearShown) return;
 
     const state = this.gameState.getState();
-    const hasDestructible = state.obstacles.some((o) => o.destructible);
+    let cleared = false;
 
-    if (!hasDestructible) {
+    if (this.stageConfig.clearCondition === 'destroy_all_obstacles') {
+      const hasDestructible = state.obstacles.some((o) => o.destructible);
+      cleared = !hasDestructible;
+    } else if (this.stageConfig.clearCondition === 'destroy_all_enemies') {
+      const allEnemiesDead = this.enemyTankIds.every((id) => {
+        const tank = state.tanks.get(id);
+        return !tank || !tank.isAlive;
+      });
+      cleared = this.enemyTankIds.length > 0 && allEnemiesDead;
+    }
+
+    if (cleared) {
       this.stageClearShown = true;
       this.gameState.setPhase('ended');
       this.showStageClearUI();
