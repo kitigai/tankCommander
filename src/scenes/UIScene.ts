@@ -52,6 +52,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.pauseMenuOverlay = null;
+
     this.createUIElements();
 
     // Subscribe to state changes for status updates
@@ -63,6 +65,9 @@ export class UIScene extends Phaser.Scene {
 
     // Initial status update
     this.updateStatusDisplay(this.gameState.getState());
+
+    // Register shutdown cleanup
+    this.events.on('shutdown', this.shutdown, this);
   }
 
   private createUIElements(): void {
@@ -333,7 +338,11 @@ export class UIScene extends Phaser.Scene {
   }
 
   private backToMenu(): void {
-    this.closePauseMenu();
+    // オーバーレイだけ削除（setPhase('playing')は不要）
+    if (this.pauseMenuOverlay?.parentNode) {
+      this.pauseMenuOverlay.parentNode.removeChild(this.pauseMenuOverlay);
+      this.pauseMenuOverlay = null;
+    }
     this.scene.stop('UIScene');
     const gameScene = this.scene.get('GameScene');
     gameScene.scene.start('MenuScene');
