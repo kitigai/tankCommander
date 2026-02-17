@@ -30,6 +30,9 @@ export class UIScene extends Phaser.Scene {
   private historyList!: HTMLDivElement;
   private commandHistory: CommandHistoryEntry[] = [];
 
+  // Pause menu
+  private pauseMenuOverlay: HTMLDivElement | null = null;
+
   constructor() {
     super({ key: 'UIScene' });
   }
@@ -67,6 +70,8 @@ export class UIScene extends Phaser.Scene {
     this.uiContainer = document.createElement('div');
     this.uiContainer.id = 'game-ui';
     this.uiContainer.innerHTML = `
+      <button id="pause-menu-btn" title="メニュー">&#9776;</button>
+
       <div id="status-display" class="ui-panel">
         <h3>Tank Status</h3>
         <div class="status-row">
@@ -134,6 +139,11 @@ export class UIScene extends Phaser.Scene {
 
     this.submitButton.addEventListener('click', () => {
       this.submitCommand();
+    });
+
+    // Pause menu button
+    document.getElementById('pause-menu-btn')!.addEventListener('click', () => {
+      this.openPauseMenu();
     });
 
     // Focus input
@@ -274,6 +284,61 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
+  // ---- Pause menu ----
+
+  private getPauseMenuItems(): { id: string; label: string; action: () => void }[] {
+    return [
+      { id: 'resume', label: 'ゲームに戻る', action: () => this.closePauseMenu() },
+      { id: 'back-to-menu', label: 'メニューに戻る', action: () => this.backToMenu() },
+    ];
+  }
+
+  private openPauseMenu(): void {
+    if (this.pauseMenuOverlay) return;
+
+    this.gameState.setPhase('paused');
+
+    const items = this.getPauseMenuItems();
+    const buttonsHtml = items
+      .map(
+        (item) =>
+          `<button class="pause-menu-item" data-pause-action="${item.id}">${item.label}</button>`
+      )
+      .join('');
+
+    this.pauseMenuOverlay = document.createElement('div');
+    this.pauseMenuOverlay.id = 'pause-menu-overlay';
+    this.pauseMenuOverlay.innerHTML = `
+      <div id="pause-menu-panel">
+        <h1 id="pause-menu-title">PAUSED</h1>
+        <div id="pause-menu-items">${buttonsHtml}</div>
+      </div>
+    `;
+    document.body.appendChild(this.pauseMenuOverlay);
+
+    // Bind actions
+    for (const item of items) {
+      this.pauseMenuOverlay
+        .querySelector(`[data-pause-action="${item.id}"]`)!
+        .addEventListener('click', item.action);
+    }
+  }
+
+  private closePauseMenu(): void {
+    if (this.pauseMenuOverlay?.parentNode) {
+      this.pauseMenuOverlay.parentNode.removeChild(this.pauseMenuOverlay);
+      this.pauseMenuOverlay = null;
+    }
+    this.gameState.setPhase('playing');
+  }
+
+  private backToMenu(): void {
+    this.closePauseMenu();
+    this.scene.stop('UIScene');
+    const gameScene = this.scene.get('GameScene');
+    gameScene.scene.start('MenuScene');
+  }
+
   private escapeHtml(text: string): string {
     const div = document.createElement('div');
     div.textContent = text;
@@ -281,6 +346,12 @@ export class UIScene extends Phaser.Scene {
   }
 
   shutdown(): void {
+    // Clean up pause menu overlay
+    if (this.pauseMenuOverlay?.parentNode) {
+      this.pauseMenuOverlay.parentNode.removeChild(this.pauseMenuOverlay);
+      this.pauseMenuOverlay = null;
+    }
+
     // Clean up DOM elements
     if (this.uiContainer && this.uiContainer.parentNode) {
       this.uiContainer.parentNode.removeChild(this.uiContainer);
