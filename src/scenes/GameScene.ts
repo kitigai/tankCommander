@@ -69,6 +69,8 @@ export class GameScene extends Phaser.Scene {
     this.createObstacles();
 
     // Create enemy tanks (if stage defines them)
+    this.enemyAIs = [];
+    this.enemyTankIds = [];
     this.createEnemyTanks();
 
     // Subscribe to state changes
@@ -92,8 +94,6 @@ export class GameScene extends Phaser.Scene {
     // Reset stage clear state
     this.stageClearShown = false;
     this.stageClearOverlay = null;
-    this.enemyAIs = [];
-    this.enemyTankIds = [];
 
     // Register shutdown cleanup
     this.events.on('shutdown', this.shutdown, this);
