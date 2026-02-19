@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "phaser": "^3.87.0"
+    "phaser": "^3.87.0",
+    "trystero": "^0.22.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

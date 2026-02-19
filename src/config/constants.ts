@@ -49,6 +49,8 @@ export const GAME_CONFIG = {
   // Tank colors (for pixel art generation)
   PLAYER_TANK_COLOR: 0x4a7c59,
   PLAYER_TURRET_COLOR: 0x3d6b4c,
+  ALLY_TANK_COLOR: 0x4a5c7c,    // 味方プレイヤー（青灰）
+  ALLY_TURRET_COLOR: 0x3d4c6b,
   ENEMY_TANK_COLOR: 0x8b4513,
   ENEMY_TURRET_COLOR: 0x6b3410,
 

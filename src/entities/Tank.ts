@@ -5,15 +5,22 @@ import { Entity } from './Entity';
 import { TankState } from '../state/TankState';
 import { PHYSICS_CONSTANTS, GAME_CONFIG } from '../config/constants';
 
+export type TankRole = 'self' | 'ally' | 'enemy';
+
 export class Tank extends Entity {
   private bodySprite: Phaser.GameObjects.Graphics;
   private turretSprite: Phaser.GameObjects.Graphics;
   private healthBar: Phaser.GameObjects.Graphics;
-  private isPlayer: boolean;
+  private role: TankRole;
 
-  constructor(scene: Phaser.Scene, id: string, initialState: TankState, isPlayer: boolean = true) {
+  constructor(scene: Phaser.Scene, id: string, initialState: TankState, roleOrIsPlayer: TankRole | boolean = true) {
     super(scene, id);
-    this.isPlayer = isPlayer;
+    // 後方互換性: boolean → TankRole 変換
+    if (typeof roleOrIsPlayer === 'boolean') {
+      this.role = roleOrIsPlayer ? 'self' : 'enemy';
+    } else {
+      this.role = roleOrIsPlayer;
+    }
 
     // Create tank body (pixel art style using graphics)
     this.bodySprite = scene.add.graphics();
@@ -34,9 +41,25 @@ export class Tank extends Entity {
     this.turretSprite.setRotation(((initialState.bodyAngle + initialState.turretAngle) * Math.PI) / 180);
   }
 
+  private getTankColor(): number {
+    switch (this.role) {
+      case 'self': return GAME_CONFIG.PLAYER_TANK_COLOR;
+      case 'ally': return GAME_CONFIG.ALLY_TANK_COLOR;
+      case 'enemy': return GAME_CONFIG.ENEMY_TANK_COLOR;
+    }
+  }
+
+  private getTurretColor(): number {
+    switch (this.role) {
+      case 'self': return GAME_CONFIG.PLAYER_TURRET_COLOR;
+      case 'ally': return GAME_CONFIG.ALLY_TURRET_COLOR;
+      case 'enemy': return GAME_CONFIG.ENEMY_TURRET_COLOR;
+    }
+  }
+
   private drawBody(): void {
     const { TANK_WIDTH, TANK_HEIGHT } = PHYSICS_CONSTANTS;
-    const color = this.isPlayer ? GAME_CONFIG.PLAYER_TANK_COLOR : GAME_CONFIG.ENEMY_TANK_COLOR;
+    const color = this.getTankColor();
 
     this.bodySprite.clear();
 
@@ -63,7 +86,7 @@ export class Tank extends Entity {
   }
 
   private drawTurret(): void {
-    const color = this.isPlayer ? GAME_CONFIG.PLAYER_TURRET_COLOR : GAME_CONFIG.ENEMY_TURRET_COLOR;
+    const color = this.getTurretColor();
 
     this.turretSprite.clear();
 

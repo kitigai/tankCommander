@@ -21,6 +21,7 @@ export class MenuScene extends Phaser.Scene {
         <div id="menu-buttons">
           <button class="menu-btn" id="btn-practice">練習モード</button>
           <button class="menu-btn" id="btn-arcade">アーケードモード</button>
+          <button class="menu-btn" id="btn-online">オンラインモード</button>
         </div>
       </div>
     `;
@@ -32,6 +33,10 @@ export class MenuScene extends Phaser.Scene {
 
     document.getElementById('btn-arcade')!.addEventListener('click', () => {
       this.scene.start('StageSelectScene');
+    });
+
+    document.getElementById('btn-online')!.addEventListener('click', () => {
+      this.scene.start('OnlineLobbyScene');
     });
   }
 

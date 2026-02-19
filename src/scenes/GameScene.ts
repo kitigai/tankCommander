@@ -1,7 +1,7 @@
 // Main game scene
 
 import Phaser from 'phaser';
-import { GameState } from '../state/GameState';
+import { GameState, GameStateData, ObstacleData } from '../state/GameState';
 import { createInitialTankState } from '../state/TankState';
 import { isProjectileExpired, updateProjectilePosition } from '../state/ProjectileState';
 import { CommandExecutor } from '../commands/CommandExecutor';
@@ -11,15 +11,42 @@ import { Obstacle } from '../entities/Obstacle';
 import { PHYSICS_CONSTANTS } from '../config/constants';
 import { getStage, StageConfig } from '../config/stages';
 import { EnemyAI } from '../ai/EnemyAI';
+import { TrysteroAdapter } from '../network/TrysteroAdapter';
 
 interface GameSceneData {
   stageId?: string;
+  // オンラインマルチプレイヤー用
+  mode?: 'local' | 'online';
+  adapter?: TrysteroAdapter;
+  isHost?: boolean;
+  tankId?: string;
+  playerId?: string;
+  connectedPeers?: { peerId: string; tankId: string }[];
 }
 
 enum CameraMode {
   Follow = 'follow',
   FreeScroll = 'freeScroll',
 }
+
+// オンライン用スポーンポイント
+const ONLINE_SPAWN_POINTS = [
+  { x: 300, y: 300 },
+  { x: PHYSICS_CONSTANTS.WORLD_WIDTH - 300, y: PHYSICS_CONSTANTS.WORLD_HEIGHT - 300 },
+  { x: 300, y: PHYSICS_CONSTANTS.WORLD_HEIGHT - 300 },
+  { x: PHYSICS_CONSTANTS.WORLD_WIDTH - 300, y: 300 },
+];
+
+// オンライン用障害物配置
+const ONLINE_OBSTACLES = [
+  { x: 800, y: 600, width: 100, height: 100, destructible: false },
+  { x: 400, y: 400, width: 80, height: 80, destructible: true },
+  { x: 1200, y: 800, width: 80, height: 80, destructible: true },
+  { x: 600, y: 200, width: 120, height: 60, destructible: false },
+  { x: 1000, y: 400, width: 80, height: 80, destructible: true },
+  { x: 500, y: 900, width: 100, height: 60, destructible: false },
+  { x: 1100, y: 300, width: 80, height: 80, destructible: true },
+];
 
 export class GameScene extends Phaser.Scene {
   private gameState!: GameState;
@@ -46,43 +73,57 @@ export class GameScene extends Phaser.Scene {
   private freeScrollX: number = 0;
   private freeScrollY: number = 0;
 
+  // オンラインマルチプレイヤー
+  private mode: 'local' | 'online' = 'local';
+  private adapter: TrysteroAdapter | null = null;
+  private isHost: boolean = false;
+  private myTankId: string = 'player';
+  private disconnectOverlay: HTMLDivElement | null = null;
+
   constructor() {
     super({ key: 'GameScene' });
   }
 
   init(data: GameSceneData): void {
     this.stageConfig = data?.stageId ? getStage(data.stageId) : undefined;
+
+    // オンラインモード設定
+    this.mode = data?.mode ?? 'local';
+    this.adapter = data?.adapter ?? null;
+    this.isHost = data?.isHost ?? false;
+    this.myTankId = data?.tankId ?? 'player';
   }
 
   create(): void {
     // Initialize state
     this.gameState = new GameState();
-    this.commandExecutor = new CommandExecutor(this.gameState);
+
+    if (this.mode === 'online' && !this.isHost) {
+      // クライアント: CommandExecutorは不要（ホストが実行する）
+      // ダミーのCommandExecutorを作成（UISceneに渡す必要があるため）
+      this.commandExecutor = new CommandExecutor(this.gameState);
+    } else {
+      this.commandExecutor = new CommandExecutor(this.gameState);
+    }
 
     // Draw world
     this.drawWorld();
 
-    // Create player tank
-    this.createPlayerTank();
-
-    // Create some obstacles
-    this.createObstacles();
-
-    // Create enemy tanks (if stage defines them)
-    this.enemyAIs = [];
-    this.enemyTankIds = [];
-    this.createEnemyTanks();
+    if (this.mode === 'online') {
+      this.createOnlineGame();
+    } else {
+      this.createLocalGame();
+    }
 
     // Subscribe to state changes
     this.gameState.subscribe(this.onStateChange.bind(this));
-
-    // Set phase to playing
-    this.gameState.setPhase('playing');
 
     // Launch UI scene in parallel
     this.scene.launch('UIScene', {
       gameState: this.gameState,
       commandExecutor: this.commandExecutor,
+      adapter: this.adapter,
+      tankId: this.myTankId,
     });
 
     // Set up camera
@@ -94,10 +135,221 @@ export class GameScene extends Phaser.Scene {
     // Reset stage clear state
     this.stageClearShown = false;
     this.stageClearOverlay = null;
+    this.disconnectOverlay = null;
 
     // Register shutdown cleanup
     this.events.on('shutdown', this.shutdown, this);
   }
+
+  // --- ローカルモード (既存ロジックそのまま) ---
+
+  private createLocalGame(): void {
+    this.createPlayerTank();
+    this.createObstacles();
+
+    this.enemyAIs = [];
+    this.enemyTankIds = [];
+    this.createEnemyTanks();
+
+    this.gameState.setPhase('playing');
+  }
+
+  // --- オンラインモード ---
+
+  private createOnlineGame(): void {
+    this.enemyAIs = [];
+    this.enemyTankIds = [];
+
+    if (this.isHost) {
+      this.createOnlineGameAsHost();
+    } else {
+      this.createOnlineGameAsClient();
+    }
+  }
+
+  private createOnlineGameAsHost(): void {
+    if (!this.adapter) return;
+
+    // ホスト自身のタンクをスポーン
+    const spawn = this.getSpawnPoint(0);
+    const hostTankState = createInitialTankState(this.myTankId, this.adapter.getPlayerId() ?? 'host', spawn.x, spawn.y);
+    this.gameState.addTank(hostTankState);
+    const hostTankEntity = new Tank(this, this.myTankId, hostTankState, 'self');
+    this.tanks.set(this.myTankId, hostTankEntity);
+
+    // 接続済みピアのタンクをスポーン
+    const peerMappings = this.adapter.getAllPeerTankMappings();
+    let peerIndex = 1;
+    for (const [peerId, tankId] of peerMappings) {
+      const peerSpawn = this.getSpawnPoint(peerIndex);
+      const peerTankState = createInitialTankState(tankId, peerId, peerSpawn.x, peerSpawn.y);
+      this.gameState.addTank(peerTankState);
+      const peerTankEntity = new Tank(this, tankId, peerTankState, 'ally');
+      this.tanks.set(tankId, peerTankEntity);
+      peerIndex++;
+    }
+
+    // オンライン用障害物を作成
+    this.createOnlineObstacles();
+
+    // ネットワークアダプタにGameState/CommandExecutorの参照を渡す
+    this.adapter.setHostReferences(this.gameState, this.commandExecutor);
+
+    // 新規プレイヤー参加（ゲーム中に参加する場合）
+    this.adapter.onPlayerJoined((playerId) => {
+      const tankId = this.adapter!.getTankIdForPeer(playerId);
+      if (!tankId) return;
+      if (this.gameState.getTank(tankId)) return; // 既に存在
+
+      const spawnIdx = this.gameState.getState().tanks.size;
+      const sp = this.getSpawnPoint(spawnIdx);
+      const newTankState = createInitialTankState(tankId, playerId, sp.x, sp.y);
+      this.gameState.addTank(newTankState);
+      // syncEntitiesが自動でTankエンティティを作成
+    });
+
+    // プレイヤー離脱
+    this.adapter.onPlayerLeft((_playerId) => {
+      // TrysteroAdapter内でgameState.removeTank()は呼ばれている
+      // syncEntitiesが自動でエンティティを削除
+    });
+
+    // ゲーム開始
+    this.gameState.setPhase('playing');
+
+    // 状態同期ブロードキャスト開始
+    this.adapter.startStateBroadcast();
+  }
+
+  private createOnlineGameAsClient(): void {
+    if (!this.adapter) return;
+
+    // クライアント: 初期状態はホストからのスナップショットで受け取る
+    // syncEntities()が状態変更時に自動でエンティティを生成する
+
+    this.adapter.onStateUpdate((stateData: GameStateData) => {
+      this.applyRemoteState(stateData);
+    });
+
+    // ホスト切断検知
+    this.adapter.onPlayerLeft((_playerId) => {
+      // ホストが切断した場合（ピアが0になった場合）を検知
+      if (!this.adapter?.isConnected()) {
+        this.showDisconnectOverlay('ホストが切断しました');
+      }
+    });
+
+    // フェーズをplayingに設定（ホストからの最初のスナップショットを待つ間）
+    this.gameState.setPhase('playing');
+  }
+
+  private createOnlineObstacles(): void {
+    ONLINE_OBSTACLES.forEach((config, index) => {
+      const obstacleData: ObstacleData = {
+        id: `obstacle_${index}`,
+        ...config,
+        health: config.destructible ? 100 : undefined,
+      };
+
+      this.gameState.addObstacle(obstacleData);
+
+      const obstacleEntity = new Obstacle(this, obstacleData);
+      this.obstacles.set(obstacleData.id, obstacleEntity);
+    });
+  }
+
+  private getSpawnPoint(index: number): { x: number; y: number } {
+    return ONLINE_SPAWN_POINTS[index % ONLINE_SPAWN_POINTS.length];
+  }
+
+  /** クライアント側: リモートの状態を適用 */
+  private applyRemoteState(remoteData: GameStateData): void {
+    const localData = this.gameState.getState();
+
+    // タンクの同期
+    for (const [id, tankState] of remoteData.tanks) {
+      if (localData.tanks.has(id)) {
+        this.gameState.updateTank(id, tankState);
+      } else {
+        this.gameState.addTank(tankState);
+      }
+    }
+    // リモートに存在しないタンクを削除
+    for (const [id] of localData.tanks) {
+      if (!remoteData.tanks.has(id)) {
+        this.gameState.removeTank(id);
+      }
+    }
+
+    // 砲弾の同期
+    for (const [id, projState] of remoteData.projectiles) {
+      if (localData.projectiles.has(id)) {
+        this.gameState.updateProjectile(id, projState);
+      } else {
+        this.gameState.addProjectile(projState);
+      }
+    }
+    for (const [id] of localData.projectiles) {
+      if (!remoteData.projectiles.has(id)) {
+        this.gameState.removeProjectile(id);
+      }
+    }
+
+    // 障害物の同期
+    const remoteObstacleIds = new Set(remoteData.obstacles.map((o) => o.id));
+    const localObstacleIds = new Set(localData.obstacles.map((o) => o.id));
+
+    for (const obstacleData of remoteData.obstacles) {
+      if (localObstacleIds.has(obstacleData.id)) {
+        this.gameState.updateObstacle(obstacleData.id, obstacleData);
+      } else {
+        this.gameState.addObstacle(obstacleData);
+      }
+    }
+    for (const id of localObstacleIds) {
+      if (!remoteObstacleIds.has(id)) {
+        this.gameState.removeObstacle(id);
+      }
+    }
+
+    // フェーズの同期
+    if (remoteData.phase !== localData.phase) {
+      this.gameState.setPhase(remoteData.phase);
+    }
+  }
+
+  private showDisconnectOverlay(message: string): void {
+    if (this.disconnectOverlay) return;
+
+    this.gameState.setPhase('ended');
+
+    this.disconnectOverlay = document.createElement('div');
+    this.disconnectOverlay.id = 'disconnect-overlay';
+    this.disconnectOverlay.innerHTML = `
+      <div id="disconnect-panel">
+        <h1 id="disconnect-title">${message}</h1>
+        <div id="disconnect-buttons">
+          <button class="menu-btn" id="btn-disconnect-menu">メニューに戻る</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(this.disconnectOverlay);
+
+    document.getElementById('btn-disconnect-menu')!.addEventListener('click', () => {
+      this.cleanupOnline();
+      this.scene.stop('UIScene');
+      this.scene.start('MenuScene');
+    });
+  }
+
+  private cleanupOnline(): void {
+    if (this.adapter) {
+      this.adapter.disconnect();
+      this.adapter = null;
+    }
+  }
+
+  // --- 既存のローカルゲーム作成メソッド ---
 
   private drawWorld(): void {
     const { WORLD_WIDTH, WORLD_HEIGHT } = PHYSICS_CONSTANTS;
@@ -145,7 +397,7 @@ export class GameScene extends Phaser.Scene {
     ];
 
     obstacleConfigs.forEach((config, index) => {
-      const obstacleData = {
+      const obstacleData: ObstacleData = {
         id: `obstacle_${index}`,
         ...config,
         health: config.destructible ? 100 : undefined,
@@ -182,19 +434,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   private setupCamera(): void {
-    const playerTank = this.tanks.get('player');
-    if (playerTank) {
-      const pos = playerTank.getPosition();
+    // カメラバウンドを設定
+    this.cameras.main.setBounds(
+      0,
+      0,
+      PHYSICS_CONSTANTS.WORLD_WIDTH,
+      PHYSICS_CONSTANTS.WORLD_HEIGHT
+    );
+    this.cameras.main.setZoom(1);
 
-      // Set camera to follow player tank area
-      this.cameras.main.setBounds(
-        0,
-        0,
-        PHYSICS_CONSTANTS.WORLD_WIDTH,
-        PHYSICS_CONSTANTS.WORLD_HEIGHT
-      );
-      this.cameras.main.setZoom(1);
+    // 自分のタンクにカメラを合わせる
+    const myTank = this.tanks.get(this.myTankId);
+    if (myTank) {
+      const pos = myTank.getPosition();
       this.cameras.main.centerOn(pos.x, pos.y);
+    } else {
+      // タンクがまだない場合（クライアント）はワールド中央
+      this.cameras.main.centerOn(
+        PHYSICS_CONSTANTS.WORLD_WIDTH / 2,
+        PHYSICS_CONSTANTS.WORLD_HEIGHT / 2
+      );
     }
   }
 
@@ -280,6 +539,15 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (this.gameState.getState().phase !== 'playing') return;
 
+    // オンラインクライアント: 描画のみ（シミュレーションはホストが実行）
+    if (this.mode === 'online' && !this.isHost) {
+      this.syncEntities();
+      this.handleFreeScroll(delta);
+      this.updateCamera();
+      return;
+    }
+
+    // ホスト or ローカル: フルシミュレーション
     // Process commands
     this.commandExecutor.processTick(delta);
 
@@ -339,8 +607,9 @@ export class GameScene extends Phaser.Scene {
     for (const [id, tankState] of state.tanks) {
       let tank = this.tanks.get(id);
       if (!tank) {
-        // Create new tank entity
-        tank = new Tank(this, id, tankState, id === 'player');
+        // タンクの色/ロールを決定
+        const role = this.determineTankRole(id, tankState.playerId);
+        tank = new Tank(this, id, tankState, role);
         this.tanks.set(id, tank);
       }
       tank.syncWithState(tankState);
@@ -376,10 +645,13 @@ export class GameScene extends Phaser.Scene {
     // Sync obstacles (ダメージによる見た目更新)
     const currentObstacleIds = new Set(state.obstacles.map((o) => o.id));
     for (const obstacleData of state.obstacles) {
-      const obstacle = this.obstacles.get(obstacleData.id);
-      if (obstacle) {
-        obstacle.syncWithState(obstacleData);
+      let obstacle = this.obstacles.get(obstacleData.id);
+      if (!obstacle) {
+        // クライアント側: リモートから新しい障害物が来た場合
+        obstacle = new Obstacle(this, obstacleData);
+        this.obstacles.set(obstacleData.id, obstacle);
       }
+      obstacle.syncWithState(obstacleData);
     }
 
     // stateから消えた障害物のエンティティを破棄
@@ -391,13 +663,24 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** タンクの表示ロール（色）を決定 */
+  private determineTankRole(tankId: string, playerId: string): boolean | 'self' | 'ally' | 'enemy' {
+    if (this.mode === 'online') {
+      if (tankId === this.myTankId) return 'self';
+      if (playerId === 'ai') return 'enemy';
+      return 'ally';
+    }
+    // ローカルモード: 従来通り
+    return tankId === 'player';
+  }
+
   private updateCamera(): void {
     if (this.cameraMode === CameraMode.FreeScroll) {
       this.cameras.main.centerOn(this.freeScrollX, this.freeScrollY);
     } else {
-      const playerTank = this.gameState.getTank('player');
-      if (playerTank) {
-        this.cameras.main.centerOn(playerTank.x, playerTank.y);
+      const myTank = this.gameState.getTank(this.myTankId);
+      if (myTank) {
+        this.cameras.main.centerOn(myTank.x, myTank.y);
       }
     }
   }
@@ -500,6 +783,7 @@ export class GameScene extends Phaser.Scene {
     document.body.appendChild(this.stageClearOverlay);
 
     document.getElementById('btn-clear-menu')!.addEventListener('click', () => {
+      this.cleanupOnline();
       this.scene.stop('UIScene');
       this.scene.start('MenuScene');
     });
@@ -510,5 +794,10 @@ export class GameScene extends Phaser.Scene {
       this.stageClearOverlay.parentNode.removeChild(this.stageClearOverlay);
       this.stageClearOverlay = null;
     }
+    if (this.disconnectOverlay?.parentNode) {
+      this.disconnectOverlay.parentNode.removeChild(this.disconnectOverlay);
+      this.disconnectOverlay = null;
+    }
+    this.cleanupOnline();
   }
 }
