@@ -5,10 +5,14 @@ import { GameState } from '../state/GameState';
 import { CommandExecutor } from '../commands/CommandExecutor';
 import { GeminiParser, MockParser } from '../ai/GeminiParser';
 import { GAME_CONFIG } from '../config/constants';
+import { TrysteroAdapter } from '../network/TrysteroAdapter';
 
 interface UISceneData {
   gameState: GameState;
   commandExecutor: CommandExecutor;
+  // オンラインモード用
+  adapter?: TrysteroAdapter;
+  tankId?: string;
 }
 
 interface CommandHistoryEntry {
@@ -21,6 +25,10 @@ export class UIScene extends Phaser.Scene {
   private gameState!: GameState;
   private commandExecutor!: CommandExecutor;
   private parser!: GeminiParser | MockParser;
+
+  // オンラインモード
+  private adapter: TrysteroAdapter | null = null;
+  private myTankId: string = 'player';
 
   // DOM elements
   private uiContainer!: HTMLDivElement;
@@ -40,6 +48,8 @@ export class UIScene extends Phaser.Scene {
   init(data: UISceneData): void {
     this.gameState = data.gameState;
     this.commandExecutor = data.commandExecutor;
+    this.adapter = data.adapter ?? null;
+    this.myTankId = data.tankId ?? 'player';
 
     // Initialize parser
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -167,7 +177,7 @@ export class UIScene extends Phaser.Scene {
 
     try {
       // Get current tank state for context
-      const playerTank = this.gameState.getTank('player');
+      const playerTank = this.gameState.getTank(this.myTankId);
       const context = playerTank
         ? {
             currentBodyAngle: playerTank.bodyAngle,
@@ -187,9 +197,15 @@ export class UIScene extends Phaser.Scene {
         this.interpretationDisplay.textContent = `✓ ${result.interpretation}`;
         this.interpretationDisplay.className = 'success';
 
-        // Queue commands
+        // Queue commands - ネットワーク対応
         result.commands.forEach((cmd) => {
-          this.commandExecutor.enqueue('player', cmd);
+          if (this.adapter) {
+            // オンラインモード: ネットワーク経由で送信
+            this.adapter.sendCommand(this.myTankId, cmd);
+          } else {
+            // ローカルモード: 直接キューに追加
+            this.commandExecutor.enqueue(this.myTankId, cmd);
+          }
         });
 
         // Add to history
@@ -232,7 +248,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private updateStatusDisplay(state: ReturnType<GameState['getState']>): void {
-    const tank = state.tanks.get('player');
+    const tank = state.tanks.get(this.myTankId);
     if (!tank) return;
 
     // Update position
@@ -270,9 +286,15 @@ export class UIScene extends Phaser.Scene {
     // Update queue count
     const queueEl = document.getElementById('status-queue');
     if (queueEl) {
-      const queueLength = this.commandExecutor.getQueueLength('player');
-      queueEl.textContent = queueLength.toString();
-      queueEl.className = queueLength > 0 ? 'executing' : '';
+      if (this.adapter && !this.adapter.isHost) {
+        // クライアントモード: キューはホスト側にあるので表示しない
+        queueEl.textContent = '-';
+        queueEl.className = '';
+      } else {
+        const queueLength = this.commandExecutor.getQueueLength(this.myTankId);
+        queueEl.textContent = queueLength.toString();
+        queueEl.className = queueLength > 0 ? 'executing' : '';
+      }
     }
   }
 
