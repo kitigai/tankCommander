@@ -52,11 +52,11 @@ export class UIScene extends Phaser.Scene {
     this.myTankId = data.tankId ?? 'player';
 
     // Initialize parser
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (apiKey) {
-      this.parser = new GeminiParser(apiKey);
+    const apiEndpoint = import.meta.env.VITE_API_ENDPOINT;
+    if (apiEndpoint) {
+      this.parser = new GeminiParser(apiEndpoint);
     } else {
-      console.warn('VITE_GEMINI_API_KEY not found, using mock parser');
+      console.warn('VITE_API_ENDPOINT not found, using mock parser');
       this.parser = new MockParser();
     }
   }
