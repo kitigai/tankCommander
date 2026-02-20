@@ -85,6 +85,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   init(data: GameSceneData): void {
+    console.log(`[GameScene] ===== init() =====`);
+    console.log(`[GameScene] data:`, JSON.stringify({
+      mode: data?.mode,
+      isHost: data?.isHost,
+      tankId: data?.tankId,
+      playerId: data?.playerId,
+      connectedPeers: data?.connectedPeers,
+      stageId: data?.stageId,
+      hasAdapter: !!data?.adapter,
+    }));
+
     this.stageConfig = data?.stageId ? getStage(data.stageId) : undefined;
 
     // オンラインモード設定
@@ -92,9 +103,12 @@ export class GameScene extends Phaser.Scene {
     this.adapter = data?.adapter ?? null;
     this.isHost = data?.isHost ?? false;
     this.myTankId = data?.tankId ?? 'player';
+
+    console.log(`[GameScene] mode=${this.mode}, isHost=${this.isHost}, myTankId=${this.myTankId}`);
   }
 
   create(): void {
+    console.log(`[GameScene] ===== create() =====`);
     // Initialize state
     this.gameState = new GameState();
 
@@ -110,6 +124,7 @@ export class GameScene extends Phaser.Scene {
     this.drawWorld();
 
     if (this.mode === 'online') {
+      console.log(`[GameScene] オンラインゲーム作成開始`);
       this.createOnlineGame();
     } else {
       this.createLocalGame();
@@ -168,7 +183,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createOnlineGameAsHost(): void {
-    if (!this.adapter) return;
+    console.log(`[GameScene] ===== createOnlineGameAsHost() =====`);
+    if (!this.adapter) {
+      console.error(`[GameScene] adapter が null! ホストゲーム作成中止`);
+      return;
+    }
 
     // ホスト自身のタンクをスポーン
     const spawn = this.getSpawnPoint(0);
@@ -222,12 +241,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createOnlineGameAsClient(): void {
-    if (!this.adapter) return;
+    console.log(`[GameScene] ===== createOnlineGameAsClient() =====`);
+    if (!this.adapter) {
+      console.error(`[GameScene] adapter が null! クライアントゲーム作成中止`);
+      return;
+    }
 
     // クライアント: 初期状態はホストからのスナップショットで受け取る
     // syncEntities()が状態変更時に自動でエンティティを生成する
 
+    let stateUpdateCount = 0;
     this.adapter.onStateUpdate((stateData: GameStateData) => {
+      stateUpdateCount++;
+      if (stateUpdateCount <= 3 || stateUpdateCount % 100 === 0) {
+        console.log(`[GameScene] 状態更新 #${stateUpdateCount}: tanks=${stateData.tanks.size}, projectiles=${stateData.projectiles.size}`);
+      }
       this.applyRemoteState(stateData);
     });
 

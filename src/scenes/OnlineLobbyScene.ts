@@ -89,10 +89,13 @@ export class OnlineLobbyScene extends Phaser.Scene {
   }
 
   private async connectAsHost(roomCode: string): Promise<void> {
+    console.log(`[OnlineLobbyScene] ===== ホスト接続開始 roomCode=${roomCode} =====`);
     try {
       this.adapter = new TrysteroAdapter({ roomCode, isHost: true });
+      console.log(`[OnlineLobbyScene] TrysteroAdapter 作成完了`);
 
       this.adapter.onPeerJoinedLobby((peerId, tankId) => {
+        console.log(`[OnlineLobbyScene] ★ ロビーにピア参加! peerId=${peerId}, tankId=${tankId}`);
         this.playerList.push({ peerId, tankId });
         this.updatePlayerListUI();
         this.updateStartButton();
@@ -100,13 +103,16 @@ export class OnlineLobbyScene extends Phaser.Scene {
       });
 
       this.adapter.onPeerLeftLobby((peerId) => {
+        console.log(`[OnlineLobbyScene] ★ ロビーからピア離脱! peerId=${peerId}`);
         this.playerList = this.playerList.filter((p) => p.peerId !== peerId);
         this.updatePlayerListUI();
         this.updateStartButton();
         this.setStatus('プレイヤーが離脱しました');
       });
 
+      console.log(`[OnlineLobbyScene] adapter.connect() 呼び出し...`);
       await this.adapter.connect();
+      console.log(`[OnlineLobbyScene] adapter.connect() 完了`);
       this.setStatus('待機中... 対戦相手を待っています');
     } catch (error) {
       console.error('[OnlineLobbyScene] Host connection error:', error);
@@ -116,6 +122,11 @@ export class OnlineLobbyScene extends Phaser.Scene {
 
   private startOnlineGame(): void {
     if (!this.adapter) return;
+
+    console.log(`[OnlineLobbyScene] ===== ゲーム開始! =====`);
+    console.log(`[OnlineLobbyScene] connectedPeers:`, JSON.stringify(this.playerList));
+    console.log(`[OnlineLobbyScene] playerId: ${this.adapter.getPlayerId()}`);
+    console.log(`[OnlineLobbyScene] scene.start('GameScene') 呼び出し...`);
 
     this.scene.start('GameScene', {
       mode: 'online',
@@ -172,6 +183,7 @@ export class OnlineLobbyScene extends Phaser.Scene {
   }
 
   private async connectToRoom(roomCode: string): Promise<void> {
+    console.log(`[OnlineLobbyScene] ===== ルーム参加開始 roomCode=${roomCode} =====`);
     if (!roomCode || roomCode.length < 4) {
       this.setStatus('有効なルームコードを入力してください');
       return;
@@ -183,14 +195,22 @@ export class OnlineLobbyScene extends Phaser.Scene {
 
     try {
       this.adapter = new TrysteroAdapter({ roomCode, isHost: false });
+      console.log(`[OnlineLobbyScene] TrysteroAdapter 作成完了 (client)`);
 
       this.adapter.onWelcome((msg) => {
+        console.log(`[OnlineLobbyScene] ★★★ Welcome受信! tankId=${msg.tankId}, playerId=${msg.playerId}`);
         this.setStatus(`接続完了! タンク: ${msg.tankId}`);
         this.showWaitingForHost();
       });
 
       this.adapter.onGameStart(() => {
-        if (!this.adapter) return;
+        console.log(`[OnlineLobbyScene] ★★★ ゲーム開始通知受信!`);
+        if (!this.adapter) {
+          console.error(`[OnlineLobbyScene] adapter が null! ゲーム開始できません`);
+          return;
+        }
+        console.log(`[OnlineLobbyScene] tankId=${this.adapter.tankId}, playerId=${this.adapter.getPlayerId()}`);
+        console.log(`[OnlineLobbyScene] scene.start('GameScene') 呼び出し (client)...`);
         this.scene.start('GameScene', {
           mode: 'online',
           adapter: this.adapter,
@@ -200,7 +220,9 @@ export class OnlineLobbyScene extends Phaser.Scene {
         });
       });
 
+      console.log(`[OnlineLobbyScene] adapter.connect() 呼び出し...`);
       await this.adapter.connect();
+      console.log(`[OnlineLobbyScene] adapter.connect() 完了. Nostrリレーに接続中...`);
 
       // Welcome受信まで待機
       this.setStatus('ホストに接続中... しばらくお待ちください');
