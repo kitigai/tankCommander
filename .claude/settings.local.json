@@ -18,5 +18,8 @@
       "Bash(gh pr create:*)",
       "Bash(xargs cat:*)"
     ]
+  },
+  "enabledPlugins": {
+    "fullstack-dev-skills@fullstack-dev-skills": true
   }
 }
