@@ -29,6 +29,16 @@ export interface TrysteroConfig {
 const APP_ID = 'tank-commander-v1';
 const STATE_SYNC_INTERVAL_MS = 67; // ~15 Hz
 
+// 信頼性の高い公開Nostrリレーを明示指定（デフォルトリレーは死んでいるものが多い）
+const NOSTR_RELAY_URLS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.fountain.fm',
+  'wss://nostr.data.haus',
+  'wss://relay.mostro.network',
+  'wss://nostr.vulpem.com',
+];
+
 
 export class TrysteroAdapter implements NetworkAdapter {
   private config: TrysteroConfig;
@@ -128,16 +138,50 @@ export class TrysteroAdapter implements NetworkAdapter {
     console.log(`[TrysteroAdapter] RoomCode: ${this.config.roomCode}`);
     console.log(`[TrysteroAdapter] selfId: ${selfId}`);
 
-    const rtcConfig: RTCConfiguration = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ],
-    };
+    // TURN認証情報（Metered.ca無料プラン）
+    const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+    const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
 
-    console.log(`[TrysteroAdapter] joinRoom() 呼び出し (appId=${APP_ID}, relayRedundancy=10)`);
+    const iceServers: RTCIceServer[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+
+    // TURN設定がある場合のみ追加（国際間NAT越えに必要）
+    if (turnUsername && turnCredential) {
+      iceServers.push(
+        { urls: 'stun:stun.relay.metered.ca:80' },
+        {
+          urls: 'turn:global.relay.metered.ca:80',
+          username: turnUsername,
+          credential: turnCredential,
+        },
+        {
+          urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+          username: turnUsername,
+          credential: turnCredential,
+        },
+        {
+          urls: 'turn:global.relay.metered.ca:443',
+          username: turnUsername,
+          credential: turnCredential,
+        },
+        {
+          urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+          username: turnUsername,
+          credential: turnCredential,
+        },
+      );
+      console.log(`[TrysteroAdapter] TURN設定あり (metered.ca)`);
+    } else {
+      console.warn(`[TrysteroAdapter] TURN設定なし - STUNのみ (国際間接続に失敗する可能性あり)`);
+    }
+
+    const rtcConfig: RTCConfiguration = { iceServers };
+
+    console.log(`[TrysteroAdapter] joinRoom() 呼び出し (appId=${APP_ID}, relayUrls=${NOSTR_RELAY_URLS.length}個)`);
     this.room = joinRoom(
-      { appId: APP_ID, rtcConfig, relayRedundancy: 10 },
+      { appId: APP_ID, rtcConfig, relayUrls: NOSTR_RELAY_URLS },
       this.config.roomCode
     );
     console.log(`[TrysteroAdapter] joinRoom() 完了 (room取得済み)`);
