@@ -1,7 +1,7 @@
 // Gemini API integration for command parsing
+// APIプロキシ経由でGemini APIを呼び出す（APIキーはサーバー側で保持）
 
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
-import { COMMAND_PARSER_SYSTEM_PROMPT, ParsedCommandResponse } from './commandSchema';
+import { ParsedCommandResponse } from './commandSchema';
 import { GameCommand, createCommand } from '../commands/types';
 
 export interface ParserContext {
@@ -16,52 +16,42 @@ export interface ParseResult {
 }
 
 export class GeminiParser {
-  private model: GenerativeModel;
+  private endpoint: string;
 
-  constructor(apiKey: string) {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    this.model = genAI.getGenerativeModel({
-      model: 'gemini-3-flash-preview',
-      systemInstruction: COMMAND_PARSER_SYSTEM_PROMPT,
-    });
+  constructor(endpoint: string) {
+    this.endpoint = endpoint;
   }
 
   async parseCommand(
     naturalLanguage: string,
     context?: ParserContext
   ): Promise<ParseResult> {
-    const contextString = context
-      ? `現在の戦車状態: 車体角度 ${context.currentBodyAngle}度、砲塔角度 ${context.currentTurretAngle}度（車体からの相対角度）`
-      : '';
+    const body: {
+      naturalLanguage: string;
+      context?: { currentBodyAngle: number; currentTurretAngle: number };
+    } = { naturalLanguage };
 
-    const userMessage = contextString
-      ? `${contextString}\n\nコマンドを解析してください: "${naturalLanguage}"`
-      : `コマンドを解析してください: "${naturalLanguage}"`;
-
-    const result = await this.model.generateContent(userMessage);
-    const response = result.response;
-    const text = response.text();
-
-    if (!text) {
-      throw new Error('Empty response from Gemini');
+    if (context) {
+      body.context = {
+        currentBodyAngle: context.currentBodyAngle,
+        currentTurretAngle: context.currentTurretAngle,
+      };
     }
 
-    // Extract JSON from response (may be wrapped in markdown code blocks)
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : text;
+    const response = await fetch(this.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
 
-    let parsed: ParsedCommandResponse;
-    try {
-      parsed = JSON.parse(jsonStr.trim());
-    } catch {
-      // Try to find JSON object in the text
-      const objectMatch = text.match(/\{[\s\S]*\}/);
-      if (objectMatch) {
-        parsed = JSON.parse(objectMatch[0]);
-      } else {
-        throw new Error(`Failed to parse JSON response: ${text}`);
-      }
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage =
+        (errorData as { error?: string }).error ?? `API error: ${response.status}`;
+      throw new Error(errorMessage);
     }
+
+    const parsed: ParsedCommandResponse = await response.json();
 
     // Convert parsed response to GameCommand array
     const commands: GameCommand[] = parsed.commands.map((cmd, index) => {
