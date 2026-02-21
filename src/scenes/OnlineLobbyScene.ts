@@ -222,7 +222,7 @@ export class OnlineLobbyScene extends Phaser.Scene {
 
       console.log(`[OnlineLobbyScene] adapter.connect() 呼び出し...`);
       await this.adapter.connect();
-      console.log(`[OnlineLobbyScene] adapter.connect() 完了. Nostrリレーに接続中...`);
+      console.log(`[OnlineLobbyScene] adapter.connect() 完了. Relayサーバーに接続中...`);
 
       // Welcome受信まで待機
       this.setStatus('ホストに接続中... しばらくお待ちください');

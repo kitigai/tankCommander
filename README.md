@@ -29,6 +29,21 @@ cp .env.example .env
 npm run dev
 ```
 
+## オンライン中継サーバー (Cloudflare Durable Objects)
+
+P2P/Nostr の代わりに、WebSocket 中継サーバーを使う構成です。
+
+```bash
+cd relay-worker
+npx wrangler deploy
+```
+
+デプロイ後、フロント側の環境変数を設定してください。
+
+```bash
+VITE_RELAY_WS_URL=wss://<your-relay-worker>.workers.dev/relay
+```
+
 ## コマンド例
 
 ### 基本コマンド
