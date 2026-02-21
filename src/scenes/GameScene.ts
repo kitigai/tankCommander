@@ -48,6 +48,9 @@ const ONLINE_OBSTACLES = [
   { x: 1100, y: 300, width: 80, height: 80, destructible: true },
 ];
 
+// 対戦モードは直撃1発で撃破にする
+const ONLINE_TANK_HEALTH = PHYSICS_CONSTANTS.PROJECTILE_DAMAGE;
+
 export class GameScene extends Phaser.Scene {
   private gameState!: GameState;
   private commandExecutor!: CommandExecutor;
@@ -191,7 +194,10 @@ export class GameScene extends Phaser.Scene {
 
     // ホスト自身のタンクをスポーン
     const spawn = this.getSpawnPoint(0);
-    const hostTankState = createInitialTankState(this.myTankId, this.adapter.getPlayerId() ?? 'host', spawn.x, spawn.y);
+    const hostTankState = createInitialTankState(this.myTankId, this.adapter.getPlayerId() ?? 'host', spawn.x, spawn.y, {
+      health: ONLINE_TANK_HEALTH,
+      maxHealth: ONLINE_TANK_HEALTH,
+    });
     this.gameState.addTank(hostTankState);
     const hostTankEntity = new Tank(this, this.myTankId, hostTankState, 'self');
     this.tanks.set(this.myTankId, hostTankEntity);
@@ -201,7 +207,10 @@ export class GameScene extends Phaser.Scene {
     let peerIndex = 1;
     for (const [peerId, tankId] of peerMappings) {
       const peerSpawn = this.getSpawnPoint(peerIndex);
-      const peerTankState = createInitialTankState(tankId, peerId, peerSpawn.x, peerSpawn.y);
+      const peerTankState = createInitialTankState(tankId, peerId, peerSpawn.x, peerSpawn.y, {
+        health: ONLINE_TANK_HEALTH,
+        maxHealth: ONLINE_TANK_HEALTH,
+      });
       this.gameState.addTank(peerTankState);
       const peerTankEntity = new Tank(this, tankId, peerTankState, 'ally');
       this.tanks.set(tankId, peerTankEntity);
@@ -222,7 +231,10 @@ export class GameScene extends Phaser.Scene {
 
       const spawnIdx = this.gameState.getState().tanks.size;
       const sp = this.getSpawnPoint(spawnIdx);
-      const newTankState = createInitialTankState(tankId, playerId, sp.x, sp.y);
+      const newTankState = createInitialTankState(tankId, playerId, sp.x, sp.y, {
+        health: ONLINE_TANK_HEALTH,
+        maxHealth: ONLINE_TANK_HEALTH,
+      });
       this.gameState.addTank(newTankState);
       // syncEntitiesが自動でTankエンティティを作成
     });
