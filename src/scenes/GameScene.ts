@@ -393,11 +393,6 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // フェーズの同期
-    if (remoteData.phase !== localData.phase) {
-      this.gameState.setPhase(remoteData.phase);
-    }
-
     if (remoteData.onlineRule !== localData.onlineRule) {
       this.onlineRule = remoteData.onlineRule;
       this.gameState.setOnlineRule(remoteData.onlineRule);
@@ -420,6 +415,12 @@ export class GameScene extends Phaser.Scene {
       remoteData.winReason !== localData.winReason
     ) {
       this.gameState.setWinner(remoteData.winnerTankId, remoteData.winReason);
+    }
+
+    // フェーズは最後に同期する
+    // ended を先に反映すると、winner/winReason 同期前に結果UIが表示され誤表示になる
+    if (remoteData.phase !== localData.phase) {
+      this.gameState.setPhase(remoteData.phase);
     }
   }
 
