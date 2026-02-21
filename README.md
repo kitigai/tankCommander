@@ -44,6 +44,25 @@ npx wrangler deploy
 VITE_RELAY_WS_URL=wss://<your-relay-worker>.workers.dev/relay
 ```
 
+## コマンド解析をCloud Runで運用する場合
+
+`cloud-run-parser/` に Cloud Run 用の parser サービスを追加しています。
+
+```bash
+cd cloud-run-parser
+gcloud run deploy tank-commander-parser \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars GEMINI_API_KEY=YOUR_KEY,GEMINI_MODEL=gemini-2.5-flash
+```
+
+フロント側は `VITE_API_ENDPOINT` を Cloud Run のURLに向けてください。
+
+```bash
+VITE_API_ENDPOINT=https://<cloud-run-service-url>/parse-command
+```
+
 ## コマンド例
 
 ### 基本コマンド
