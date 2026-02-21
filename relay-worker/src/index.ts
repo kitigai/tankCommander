@@ -1,3 +1,5 @@
+import { DurableObject } from 'cloudflare:workers';
+
 export interface Env {
   ROOM_HUB: DurableObjectNamespace;
 }
@@ -55,6 +57,10 @@ export default {
 };
 
 export class RoomHub extends DurableObject {
+  constructor(ctx: DurableObjectState, _env: Env) {
+    super(ctx, _env);
+  }
+
   private peers: Map<string, PeerInfo> = new Map();
   private hostPeerId: string | null = null;
   private nextTankIndex = 0;
