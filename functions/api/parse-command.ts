@@ -9,6 +9,7 @@ import {
 
 interface Env {
   GEMINI_API_KEY: string;
+  GEMINI_MODEL?: string;
 }
 
 interface RequestBody {
@@ -79,8 +80,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       ? `${contextString}\n\nコマンドを解析してください: "${body.naturalLanguage}"`
       : `コマンドを解析してください: "${body.naturalLanguage}"`;
 
+    const modelName = context.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+
     // Gemini API呼び出し（リトライ付き）
-    const parsed = await callGeminiWithRetry(apiKey, userMessage, 3);
+    const parsed = await callGeminiWithRetry(apiKey, modelName, userMessage, 3);
 
     return jsonResponse(parsed, 200);
   } catch (error) {
@@ -103,12 +106,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 /** Gemini API呼び出し（リトライ付き） */
 async function callGeminiWithRetry(
   apiKey: string,
+  modelName: string,
   userMessage: string,
   maxRetries: number
 ): Promise<ParsedCommandResponse> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: modelName,
     systemInstruction: COMMAND_PARSER_SYSTEM_PROMPT,
   });
 

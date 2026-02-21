@@ -145,3 +145,8 @@ npm run preview
 ## ライセンス
 
 MIT
+
+## TODO
+
+- relay worker に簡易メトリクス（接続数・ルーム数・エラー種別）を追加する
+- `TrysteroAdapter` を `RelayAdapter` にリネームして実装名と実体を一致させる
