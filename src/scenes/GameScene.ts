@@ -50,8 +50,8 @@ const ONLINE_OBSTACLES = [
   { x: 1100, y: 300, width: 80, height: 80, destructible: true },
 ];
 
-// 対戦モードは直撃1発で撃破にする
-const ONLINE_TANK_HEALTH = PHYSICS_CONSTANTS.PROJECTILE_DAMAGE;
+// オンライン対戦の耐久値（Issue #13: 1発は耐える）
+const ONLINE_TANK_HEALTH = 50;
 
 const ONLINE_CAPTURE_ZONE: CaptureZone = {
   x: PHYSICS_CONSTANTS.WORLD_WIDTH / 2,
