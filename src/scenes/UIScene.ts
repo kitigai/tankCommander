@@ -6,6 +6,7 @@ import { CommandExecutor } from '../commands/CommandExecutor';
 import { GeminiParser, MockParser } from '../ai/GeminiParser';
 import { GAME_CONFIG } from '../config/constants';
 import { TrysteroAdapter } from '../network/TrysteroAdapter';
+import { ONLINE_GAME_RULE_LABELS, OnlineGameRule } from '../config/onlineRules';
 
 interface UISceneData {
   gameState: GameState;
@@ -13,6 +14,7 @@ interface UISceneData {
   // オンラインモード用
   adapter?: TrysteroAdapter;
   tankId?: string;
+  onlineRule?: OnlineGameRule;
 }
 
 interface CommandHistoryEntry {
@@ -114,6 +116,14 @@ export class UIScene extends Phaser.Scene {
         <div class="status-row">
           <span>Camera:</span>
           <span id="status-camera-mode">FOLLOW</span>
+        </div>
+        <div class="status-row">
+          <span>Rule:</span>
+          <span id="status-rule">-</span>
+        </div>
+        <div class="status-row">
+          <span>Capture:</span>
+          <span id="status-capture">-</span>
         </div>
         <div class="status-row camera-hint">
           <span></span>
@@ -294,6 +304,33 @@ export class UIScene extends Phaser.Scene {
         const queueLength = this.commandExecutor.getQueueLength(this.myTankId);
         queueEl.textContent = queueLength.toString();
         queueEl.className = queueLength > 0 ? 'executing' : '';
+      }
+    }
+
+    const ruleEl = document.getElementById('status-rule');
+    if (ruleEl) {
+      if (this.adapter) {
+        ruleEl.textContent = ONLINE_GAME_RULE_LABELS[state.onlineRule] ?? '-';
+      } else {
+        ruleEl.textContent = '-';
+      }
+    }
+
+    const captureEl = document.getElementById('status-capture');
+    if (captureEl) {
+      if (!this.adapter || state.onlineRule !== 'capture') {
+        captureEl.textContent = '-';
+      } else {
+        const my = Math.round(state.captureProgress[this.myTankId] ?? 0);
+        const enemyMax = Math.round(
+          Math.max(
+            0,
+            ...Array.from(state.tanks.keys())
+              .filter((id) => id !== this.myTankId)
+              .map((id) => state.captureProgress[id] ?? 0)
+          )
+        );
+        captureEl.textContent = `${my}% / ${enemyMax}%`;
       }
     }
   }

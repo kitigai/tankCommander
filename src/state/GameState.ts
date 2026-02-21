@@ -3,6 +3,7 @@
 import { TankState, cloneTankState } from './TankState';
 import { ProjectileState } from './ProjectileState';
 import { PHYSICS_CONSTANTS } from '../config/constants';
+import { OnlineGameRule } from '../config/onlineRules';
 
 export interface ObstacleData {
   id: string;
@@ -14,10 +15,23 @@ export interface ObstacleData {
   health?: number;
 }
 
+export interface CaptureZone {
+  x: number;
+  y: number;
+  radius: number;
+}
+
+export type WinReason = 'elimination' | 'capture';
+
 export interface GameStateData {
   gameId: string;
   tick: number;
   phase: 'waiting' | 'playing' | 'paused' | 'ended';
+  onlineRule: OnlineGameRule;
+  captureZone: CaptureZone | null;
+  captureProgress: Record<string, number>;
+  winnerTankId: string | null;
+  winReason: WinReason | null;
   tanks: Map<string, TankState>;
   projectiles: Map<string, ProjectileState>;
   obstacles: ObstacleData[];
@@ -35,6 +49,11 @@ export class GameState {
       gameId: crypto.randomUUID(),
       tick: 0,
       phase: 'waiting',
+      onlineRule: 'elimination',
+      captureZone: null,
+      captureProgress: {},
+      winnerTankId: null,
+      winReason: null,
       tanks: new Map(),
       projectiles: new Map(),
       obstacles: [],
@@ -54,6 +73,27 @@ export class GameState {
   // Phase management
   setPhase(phase: GameStateData['phase']): void {
     this.data.phase = phase;
+    this.notifyListeners();
+  }
+
+  setOnlineRule(rule: OnlineGameRule): void {
+    this.data.onlineRule = rule;
+    this.notifyListeners();
+  }
+
+  setCaptureZone(zone: CaptureZone | null): void {
+    this.data.captureZone = zone;
+    this.notifyListeners();
+  }
+
+  setCaptureProgress(progress: Record<string, number>): void {
+    this.data.captureProgress = { ...progress };
+    this.notifyListeners();
+  }
+
+  setWinner(winnerTankId: string | null, reason: WinReason | null): void {
+    this.data.winnerTankId = winnerTankId;
+    this.data.winReason = reason;
     this.notifyListeners();
   }
 
@@ -153,6 +193,11 @@ export class GameState {
       gameId: parsed.gameId,
       tick: parsed.tick,
       phase: parsed.phase,
+      onlineRule: parsed.onlineRule ?? 'elimination',
+      captureZone: parsed.captureZone ?? null,
+      captureProgress: parsed.captureProgress ?? {},
+      winnerTankId: parsed.winnerTankId ?? null,
+      winReason: parsed.winReason ?? null,
       obstacles: parsed.obstacles,
       worldBounds: parsed.worldBounds,
     });
@@ -165,6 +210,8 @@ export class GameState {
   snapshot(): GameStateData {
     return {
       ...this.data,
+      captureZone: this.data.captureZone ? { ...this.data.captureZone } : null,
+      captureProgress: { ...this.data.captureProgress },
       tanks: new Map(
         Array.from(this.data.tanks.entries()).map(([id, tank]) => [id, cloneTankState(tank)])
       ),

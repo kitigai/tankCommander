@@ -1,7 +1,7 @@
 // Main game scene
 
 import Phaser from 'phaser';
-import { GameState, GameStateData, ObstacleData } from '../state/GameState';
+import { CaptureZone, GameState, GameStateData, ObstacleData, WinReason } from '../state/GameState';
 import { createInitialTankState } from '../state/TankState';
 import { isProjectileExpired, updateProjectilePosition } from '../state/ProjectileState';
 import { CommandExecutor } from '../commands/CommandExecutor';
@@ -9,6 +9,7 @@ import { Tank } from '../entities/Tank';
 import { Projectile } from '../entities/Projectile';
 import { Obstacle } from '../entities/Obstacle';
 import { PHYSICS_CONSTANTS } from '../config/constants';
+import { CAPTURE_RULE_CONFIG, OnlineGameRule } from '../config/onlineRules';
 import { getStage, StageConfig } from '../config/stages';
 import { EnemyAI } from '../ai/EnemyAI';
 import { TrysteroAdapter } from '../network/TrysteroAdapter';
@@ -17,6 +18,7 @@ interface GameSceneData {
   stageId?: string;
   // オンラインマルチプレイヤー用
   mode?: 'local' | 'online';
+  onlineRule?: OnlineGameRule;
   adapter?: TrysteroAdapter;
   isHost?: boolean;
   tankId?: string;
@@ -51,6 +53,12 @@ const ONLINE_OBSTACLES = [
 // 対戦モードは直撃1発で撃破にする
 const ONLINE_TANK_HEALTH = PHYSICS_CONSTANTS.PROJECTILE_DAMAGE;
 
+const ONLINE_CAPTURE_ZONE: CaptureZone = {
+  x: PHYSICS_CONSTANTS.WORLD_WIDTH / 2,
+  y: PHYSICS_CONSTANTS.WORLD_HEIGHT / 2,
+  radius: CAPTURE_RULE_CONFIG.zoneRadius,
+};
+
 export class GameScene extends Phaser.Scene {
   private gameState!: GameState;
   private commandExecutor!: CommandExecutor;
@@ -82,6 +90,9 @@ export class GameScene extends Phaser.Scene {
   private isHost: boolean = false;
   private myTankId: string = 'player';
   private disconnectOverlay: HTMLDivElement | null = null;
+  private onlineRule: OnlineGameRule = 'elimination';
+  private onlineResultOverlay: HTMLDivElement | null = null;
+  private captureZoneGraphics: Phaser.GameObjects.Graphics | null = null;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -91,6 +102,7 @@ export class GameScene extends Phaser.Scene {
     console.log(`[GameScene] ===== init() =====`);
     console.log(`[GameScene] data:`, JSON.stringify({
       mode: data?.mode,
+      onlineRule: data?.onlineRule,
       isHost: data?.isHost,
       tankId: data?.tankId,
       playerId: data?.playerId,
@@ -103,6 +115,7 @@ export class GameScene extends Phaser.Scene {
 
     // オンラインモード設定
     this.mode = data?.mode ?? 'local';
+    this.onlineRule = data?.onlineRule ?? 'elimination';
     this.adapter = data?.adapter ?? null;
     this.isHost = data?.isHost ?? false;
     this.myTankId = data?.tankId ?? 'player';
@@ -142,6 +155,7 @@ export class GameScene extends Phaser.Scene {
       commandExecutor: this.commandExecutor,
       adapter: this.adapter,
       tankId: this.myTankId,
+      onlineRule: this.onlineRule,
     });
 
     // Set up camera
@@ -154,6 +168,7 @@ export class GameScene extends Phaser.Scene {
     this.stageClearShown = false;
     this.stageClearOverlay = null;
     this.disconnectOverlay = null;
+    this.onlineResultOverlay = null;
 
     // Register shutdown cleanup
     this.events.on('shutdown', this.shutdown, this);
@@ -217,6 +232,8 @@ export class GameScene extends Phaser.Scene {
       peerIndex++;
     }
 
+    this.initializeOnlineRuleState();
+
     // オンライン用障害物を作成
     this.createOnlineObstacles();
 
@@ -236,6 +253,12 @@ export class GameScene extends Phaser.Scene {
         maxHealth: ONLINE_TANK_HEALTH,
       });
       this.gameState.addTank(newTankState);
+      if (this.gameState.getState().onlineRule === 'capture') {
+        this.gameState.setCaptureProgress({
+          ...this.gameState.getState().captureProgress,
+          [tankId]: 0,
+        });
+      }
       // syncEntitiesが自動でTankエンティティを作成
     });
 
@@ -249,7 +272,7 @@ export class GameScene extends Phaser.Scene {
     this.gameState.setPhase('playing');
 
     // 状態同期ブロードキャスト開始
-    this.adapter.startStateBroadcast();
+    this.adapter.startStateBroadcast(this.onlineRule);
   }
 
   private createOnlineGameAsClient(): void {
@@ -281,6 +304,24 @@ export class GameScene extends Phaser.Scene {
 
     // フェーズをplayingに設定（ホストからの最初のスナップショットを待つ間）
     this.gameState.setPhase('playing');
+  }
+
+  private initializeOnlineRuleState(): void {
+    this.gameState.setOnlineRule(this.onlineRule);
+
+    if (this.onlineRule === 'capture') {
+      this.gameState.setCaptureZone(ONLINE_CAPTURE_ZONE);
+      const captureProgress: Record<string, number> = {};
+      for (const [tankId] of this.gameState.getState().tanks) {
+        captureProgress[tankId] = 0;
+      }
+      this.gameState.setCaptureProgress(captureProgress);
+    } else {
+      this.gameState.setCaptureZone(null);
+      this.gameState.setCaptureProgress({});
+    }
+
+    this.gameState.setWinner(null, null);
   }
 
   private createOnlineObstacles(): void {
@@ -355,6 +396,30 @@ export class GameScene extends Phaser.Scene {
     // フェーズの同期
     if (remoteData.phase !== localData.phase) {
       this.gameState.setPhase(remoteData.phase);
+    }
+
+    if (remoteData.onlineRule !== localData.onlineRule) {
+      this.onlineRule = remoteData.onlineRule;
+      this.gameState.setOnlineRule(remoteData.onlineRule);
+    }
+
+    const localZoneJson = JSON.stringify(localData.captureZone);
+    const remoteZoneJson = JSON.stringify(remoteData.captureZone);
+    if (localZoneJson !== remoteZoneJson) {
+      this.gameState.setCaptureZone(remoteData.captureZone);
+    }
+
+    const localProgressJson = JSON.stringify(localData.captureProgress);
+    const remoteProgressJson = JSON.stringify(remoteData.captureProgress);
+    if (localProgressJson !== remoteProgressJson) {
+      this.gameState.setCaptureProgress(remoteData.captureProgress);
+    }
+
+    if (
+      remoteData.winnerTankId !== localData.winnerTankId ||
+      remoteData.winReason !== localData.winReason
+    ) {
+      this.gameState.setWinner(remoteData.winnerTankId, remoteData.winReason);
     }
   }
 
@@ -582,6 +647,7 @@ export class GameScene extends Phaser.Scene {
     // オンラインクライアント: 描画のみ（シミュレーションはホストが実行）
     if (this.mode === 'online' && !this.isHost) {
       this.syncEntities();
+      this.updateCaptureZoneVisual();
       this.handleFreeScroll(delta);
       this.updateCamera();
       return;
@@ -601,6 +667,7 @@ export class GameScene extends Phaser.Scene {
 
     // Sync entities with state
     this.syncEntities();
+    this.updateCaptureZoneVisual();
 
     // Handle free scroll input
     this.handleFreeScroll(delta);
@@ -613,6 +680,9 @@ export class GameScene extends Phaser.Scene {
 
     // Check stage clear condition (arcade mode only)
     this.checkStageClear();
+
+    // Check online match conditions (host only)
+    this.checkOnlineMatchConditions(delta);
   }
 
   private updateProjectiles(delta: number): void {
@@ -782,7 +852,150 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onStateChange(_state: Readonly<ReturnType<GameState['getState']>>): void {
-    // Handle state changes if needed (e.g., game over)
+    const state = this.gameState.getState();
+
+    if (this.mode === 'online') {
+      this.updateCaptureZoneVisual();
+      if (state.phase === 'ended' && !this.onlineResultOverlay && !this.disconnectOverlay) {
+        this.showOnlineResultUI();
+      }
+    }
+  }
+
+  private checkOnlineMatchConditions(delta: number): void {
+    if (this.mode !== 'online' || !this.isHost) return;
+    if (this.gameState.getState().phase !== 'playing') return;
+
+    if (this.isEliminationFinished()) return;
+
+    if (this.gameState.getState().onlineRule === 'capture') {
+      this.updateCaptureProgress(delta);
+      this.checkCaptureFinished();
+    }
+  }
+
+  private isEliminationFinished(): boolean {
+    const state = this.gameState.getState();
+    const alive = Array.from(state.tanks.values()).filter((tank) => tank.isAlive);
+
+    if (state.tanks.size < 2) {
+      return false;
+    }
+
+    if (alive.length === 1) {
+      this.finishOnlineMatch(alive[0].id, 'elimination');
+      return true;
+    }
+
+    if (alive.length === 0) {
+      this.finishOnlineMatch(null, 'elimination');
+      return true;
+    }
+
+    return false;
+  }
+
+  private updateCaptureProgress(delta: number): void {
+    const state = this.gameState.getState();
+    const zone = state.captureZone;
+    if (!zone) return;
+
+    const nextProgress: Record<string, number> = {};
+    const fillDelta = CAPTURE_RULE_CONFIG.fillRatePerSecond * (delta / 1000);
+    const decayDelta = CAPTURE_RULE_CONFIG.decayRatePerSecond * (delta / 1000);
+
+    for (const [tankId, tank] of state.tanks) {
+      const base = state.captureProgress[tankId] ?? 0;
+      if (!tank.isAlive) {
+        nextProgress[tankId] = 0;
+        continue;
+      }
+
+      const inside = this.isInsideCaptureZone(tank.x, tank.y, zone);
+      const value = inside ? base + fillDelta : base - decayDelta;
+      nextProgress[tankId] = Phaser.Math.Clamp(value, 0, 100);
+    }
+
+    this.gameState.setCaptureProgress(nextProgress);
+  }
+
+  private checkCaptureFinished(): void {
+    const state = this.gameState.getState();
+    const winner = Object.entries(state.captureProgress).find(([, progress]) => progress >= 100);
+    if (winner) {
+      this.finishOnlineMatch(winner[0], 'capture');
+    }
+  }
+
+  private finishOnlineMatch(winnerTankId: string | null, reason: WinReason): void {
+    this.gameState.setWinner(winnerTankId, reason);
+    this.gameState.setPhase('ended');
+  }
+
+  private isInsideCaptureZone(x: number, y: number, zone: CaptureZone): boolean {
+    const dx = x - zone.x;
+    const dy = y - zone.y;
+    return dx * dx + dy * dy <= zone.radius * zone.radius;
+  }
+
+  private updateCaptureZoneVisual(): void {
+    const state = this.gameState.getState();
+    const shouldShow = this.mode === 'online' && state.onlineRule === 'capture' && !!state.captureZone;
+
+    if (!shouldShow) {
+      if (this.captureZoneGraphics) {
+        this.captureZoneGraphics.destroy();
+        this.captureZoneGraphics = null;
+      }
+      return;
+    }
+
+    if (!this.captureZoneGraphics) {
+      this.captureZoneGraphics = this.add.graphics();
+      this.captureZoneGraphics.setDepth(1);
+    }
+
+    const zone = state.captureZone!;
+    this.captureZoneGraphics.clear();
+    this.captureZoneGraphics.lineStyle(3, 0xf7e463, 0.9);
+    this.captureZoneGraphics.fillStyle(0xf7e463, 0.08);
+    this.captureZoneGraphics.fillCircle(zone.x, zone.y, zone.radius);
+    this.captureZoneGraphics.strokeCircle(zone.x, zone.y, zone.radius);
+  }
+
+  private showOnlineResultUI(): void {
+    const state = this.gameState.getState();
+
+    let title = 'DRAW';
+    let color = '#ffeb3b';
+    if (state.winnerTankId === this.myTankId) {
+      title = 'VICTORY';
+      color = '#4caf50';
+    } else if (state.winnerTankId) {
+      title = 'DEFEAT';
+      color = '#f44336';
+    }
+
+    const reason = state.winReason === 'capture' ? '占領勝利' : '殲滅勝利';
+
+    this.onlineResultOverlay = document.createElement('div');
+    this.onlineResultOverlay.id = 'stage-clear-ui';
+    this.onlineResultOverlay.innerHTML = `
+      <div id="stage-clear-panel">
+        <h1 id="stage-clear-title" style="color:${color}">${title}</h1>
+        <p style="color:#ccc;font-family:'Courier New',monospace;margin:0 0 24px 0;">${reason}</p>
+        <div id="stage-clear-buttons">
+          <button class="menu-btn" id="btn-online-result-menu">メニューに戻る</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(this.onlineResultOverlay);
+
+    document.getElementById('btn-online-result-menu')!.addEventListener('click', () => {
+      this.cleanupOnline();
+      this.scene.stop('UIScene');
+      this.scene.start('MenuScene');
+    });
   }
 
   private checkStageClear(): void {
@@ -837,6 +1050,14 @@ export class GameScene extends Phaser.Scene {
     if (this.disconnectOverlay?.parentNode) {
       this.disconnectOverlay.parentNode.removeChild(this.disconnectOverlay);
       this.disconnectOverlay = null;
+    }
+    if (this.onlineResultOverlay?.parentNode) {
+      this.onlineResultOverlay.parentNode.removeChild(this.onlineResultOverlay);
+      this.onlineResultOverlay = null;
+    }
+    if (this.captureZoneGraphics) {
+      this.captureZoneGraphics.destroy();
+      this.captureZoneGraphics = null;
     }
     this.cleanupOnline();
   }

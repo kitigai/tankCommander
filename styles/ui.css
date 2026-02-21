@@ -647,6 +647,34 @@
   text-align: left;
 }
 
+#rule-select {
+  margin: 20px 0;
+  text-align: left;
+}
+
+#rule-select h4 {
+  color: #4caf50;
+  font-size: 13px;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 6px;
+}
+
+.rule-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  color: #ccc;
+  font-size: 13px;
+}
+
+.rule-option input {
+  accent-color: #4caf50;
+}
+
 #player-list h4 {
   color: #4caf50;
   font-size: 13px;

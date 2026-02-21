@@ -2,6 +2,7 @@
 
 import { GameCommand } from '../commands/types';
 import { GameStateData } from '../state/GameState';
+import { OnlineGameRule } from '../config/onlineRules';
 
 // ----- Reliable チャネル (順序保証・再送あり) -----
 
@@ -46,6 +47,7 @@ export interface CommandAckMessage {
 export interface PhaseChangeMessage {
   type: 'phase_change';
   phase: GameStateData['phase'];
+  onlineRule?: OnlineGameRule;
 }
 
 // クライアント → ホスト: 準備状態

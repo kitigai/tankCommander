@@ -2,11 +2,13 @@
 
 import Phaser from 'phaser';
 import { TrysteroAdapter } from '../network/TrysteroAdapter';
+import { ONLINE_GAME_RULE_LABELS, OnlineGameRule } from '../config/onlineRules';
 
 export class OnlineLobbyScene extends Phaser.Scene {
   private container!: HTMLDivElement;
   private adapter: TrysteroAdapter | null = null;
   private playerList: { peerId: string; tankId: string }[] = [];
+  private selectedRule: OnlineGameRule = 'elimination';
 
   constructor() {
     super({ key: 'OnlineLobbyScene' });
@@ -15,6 +17,7 @@ export class OnlineLobbyScene extends Phaser.Scene {
   create(): void {
     this.adapter = null;
     this.playerList = [];
+    this.selectedRule = 'elimination';
     this.createInitialUI();
     this.events.on('shutdown', this.shutdown, this);
   }
@@ -69,6 +72,17 @@ export class OnlineLobbyScene extends Phaser.Scene {
           <li class="player-item self">あなた (ホスト)</li>
         </ul>
       </div>
+      <div id="rule-select">
+        <h4>ゲームルール</h4>
+        <label class="rule-option">
+          <input type="radio" name="game-rule" value="elimination" checked />
+          <span>${ONLINE_GAME_RULE_LABELS.elimination}</span>
+        </label>
+        <label class="rule-option">
+          <input type="radio" name="game-rule" value="capture" />
+          <span>${ONLINE_GAME_RULE_LABELS.capture}</span>
+        </label>
+      </div>
       <div id="lobby-actions">
         <button class="menu-btn" id="btn-start-game" disabled>ゲーム開始</button>
         <button id="btn-cancel-room" class="lobby-back-btn">キャンセル</button>
@@ -83,6 +97,13 @@ export class OnlineLobbyScene extends Phaser.Scene {
 
     document.getElementById('btn-start-game')!.addEventListener('click', () => {
       this.startOnlineGame();
+    });
+
+    panel.querySelectorAll<HTMLInputElement>('input[name="game-rule"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (!input.checked) return;
+        this.selectedRule = input.value as OnlineGameRule;
+      });
     });
 
     this.connectAsHost(roomCode);
@@ -130,6 +151,7 @@ export class OnlineLobbyScene extends Phaser.Scene {
 
     this.scene.start('GameScene', {
       mode: 'online',
+      onlineRule: this.selectedRule,
       adapter: this.adapter,
       isHost: true,
       tankId: 'player_0',
@@ -203,7 +225,7 @@ export class OnlineLobbyScene extends Phaser.Scene {
         this.showWaitingForHost();
       });
 
-      this.adapter.onGameStart(() => {
+      this.adapter.onGameStart((payload) => {
         console.log(`[OnlineLobbyScene] ★★★ ゲーム開始通知受信!`);
         if (!this.adapter) {
           console.error(`[OnlineLobbyScene] adapter が null! ゲーム開始できません`);
@@ -213,6 +235,7 @@ export class OnlineLobbyScene extends Phaser.Scene {
         console.log(`[OnlineLobbyScene] scene.start('GameScene') 呼び出し (client)...`);
         this.scene.start('GameScene', {
           mode: 'online',
+          onlineRule: payload.onlineRule ?? 'elimination',
           adapter: this.adapter,
           isHost: false,
           tankId: this.adapter.tankId,
