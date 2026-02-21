@@ -5,6 +5,7 @@ import type { GameCommand } from '../commands/types';
 import type { GameStateData } from '../state/GameState';
 import { GameState } from '../state/GameState';
 import type { CommandExecutor } from '../commands/CommandExecutor';
+import type { OnlineGameRule } from '../config/onlineRules';
 import type {
   ReliableMessage,
   CommandMessage,
@@ -74,7 +75,7 @@ export class TrysteroAdapter implements NetworkAdapter {
   private onPeerJoinedLobbyCallback?: (peerId: string, tankId: string) => void;
   private onPeerLeftLobbyCallback?: (peerId: string) => void;
   private onWelcomeCallback?: (msg: WelcomeMessage) => void;
-  private onGameStartCallback?: () => void;
+  private onGameStartCallback?: (payload: { onlineRule?: OnlineGameRule }) => void;
 
   constructor(config: TrysteroConfig) {
     this.config = config;
@@ -92,7 +93,7 @@ export class TrysteroAdapter implements NetworkAdapter {
     this.onWelcomeCallback = callback;
   }
 
-  onGameStart(callback: () => void): void {
+  onGameStart(callback: (payload: { onlineRule?: OnlineGameRule }) => void): void {
     this.onGameStartCallback = callback;
   }
 
@@ -232,12 +233,13 @@ export class TrysteroAdapter implements NetworkAdapter {
     return this._playerId;
   }
 
-  startStateBroadcast(): void {
+  startStateBroadcast(onlineRule?: OnlineGameRule): void {
     if (!this.config.isHost || !this.gameState) return;
 
     const phaseMsg: PhaseChangeMessage = {
       type: 'phase_change',
       phase: 'playing',
+      onlineRule,
     };
     this.sendReliableMsg(phaseMsg);
 
@@ -344,7 +346,7 @@ export class TrysteroAdapter implements NetworkAdapter {
         break;
       case 'phase_change':
         if (msg.phase === 'playing') {
-          this.onGameStartCallback?.();
+          this.onGameStartCallback?.({ onlineRule: msg.onlineRule });
         }
         break;
     }
