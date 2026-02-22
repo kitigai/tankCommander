@@ -44,8 +44,8 @@ export class BootScene extends Phaser.Scene {
       console.warn(`[BootScene] asset load failed: ${file.key} (${file.src})`);
     });
 
-    this.load.image('tank_body_base', 'assets/sprites/tank_body_base.png');
-    this.load.image('tank_turret_base', 'assets/sprites/tank_turret_base.png');
+    this.load.image('tank_body_base', '/assets/sprites/tank_body_base.png');
+    this.load.image('tank_turret_base', '/assets/sprites/tank_turret_base.png');
 
     // Since we're using graphics for sprites, we just need a short delay
     // to ensure everything is ready
