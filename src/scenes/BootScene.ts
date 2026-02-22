@@ -39,6 +39,14 @@ export class BootScene extends Phaser.Scene {
       loadingText.destroy();
     });
 
+    this.load.on('loaderror', (file: Phaser.Loader.File) => {
+      // 新規テクスチャ未配置時もゲームが起動できるよう、Tank側でGraphicsへフォールバックする
+      console.warn(`[BootScene] asset load failed: ${file.key} (${file.src})`);
+    });
+
+    this.load.image('tank_body_base', 'assets/sprites/tank_body_base.png');
+    this.load.image('tank_turret_base', 'assets/sprites/tank_turret_base.png');
+
     // Since we're using graphics for sprites, we just need a short delay
     // to ensure everything is ready
     this.load.image('placeholder', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
