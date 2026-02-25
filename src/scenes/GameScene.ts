@@ -14,6 +14,8 @@ import { getStage, StageConfig } from '../config/stages';
 import { EnemyAI } from '../ai/EnemyAI';
 import { TrysteroAdapter } from '../network/TrysteroAdapter';
 
+const BATTLEFIELD_TILE_TEXTURE_KEY = 'battlefield_ground_tile';
+
 interface GameSceneData {
   stageId?: string;
   // オンラインマルチプレイヤー用
@@ -67,6 +69,7 @@ export class GameScene extends Phaser.Scene {
   private obstacles: Map<string, Obstacle> = new Map();
   private worldBoundsGraphics!: Phaser.GameObjects.Graphics;
   private gridGraphics!: Phaser.GameObjects.Graphics;
+  private groundTileSprite: Phaser.GameObjects.TileSprite | null = null;
 
   // Stage config (undefined = Practice Mode)
   private stageConfig: StageConfig | undefined;
@@ -460,16 +463,25 @@ export class GameScene extends Phaser.Scene {
   private drawWorld(): void {
     const { WORLD_WIDTH, WORLD_HEIGHT } = PHYSICS_CONSTANTS;
 
-    // Draw grid for reference
-    this.gridGraphics = this.add.graphics();
-    this.gridGraphics.lineStyle(1, 0x3d7a3d, 0.3);
-
-    // Grid lines every 100 pixels
-    for (let x = 0; x <= WORLD_WIDTH; x += 100) {
-      this.gridGraphics.lineBetween(x, 0, x, WORLD_HEIGHT);
+    if (this.textures.exists(BATTLEFIELD_TILE_TEXTURE_KEY)) {
+      this.groundTileSprite = this.add
+        .tileSprite(0, 0, WORLD_WIDTH, WORLD_HEIGHT, BATTLEFIELD_TILE_TEXTURE_KEY)
+        .setOrigin(0, 0)
+        .setDepth(-1000);
     }
-    for (let y = 0; y <= WORLD_HEIGHT; y += 100) {
-      this.gridGraphics.lineBetween(0, y, WORLD_WIDTH, y);
+
+    // 背景タイルがない場合のみ、従来のグリッドを描画
+    this.gridGraphics = this.add.graphics();
+    if (!this.groundTileSprite) {
+      this.gridGraphics.lineStyle(1, 0x3d7a3d, 0.3);
+
+      // Grid lines every 100 pixels
+      for (let x = 0; x <= WORLD_WIDTH; x += 100) {
+        this.gridGraphics.lineBetween(x, 0, x, WORLD_HEIGHT);
+      }
+      for (let y = 0; y <= WORLD_HEIGHT; y += 100) {
+        this.gridGraphics.lineBetween(0, y, WORLD_WIDTH, y);
+      }
     }
 
     // Draw world bounds
@@ -1044,6 +1056,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   shutdown(): void {
+    if (this.groundTileSprite) {
+      this.groundTileSprite.destroy();
+      this.groundTileSprite = null;
+    }
+    if (this.gridGraphics?.active) {
+      this.gridGraphics.destroy();
+    }
+    if (this.worldBoundsGraphics?.active) {
+      this.worldBoundsGraphics.destroy();
+    }
     if (this.stageClearOverlay?.parentNode) {
       this.stageClearOverlay.parentNode.removeChild(this.stageClearOverlay);
       this.stageClearOverlay = null;

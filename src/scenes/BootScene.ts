@@ -2,6 +2,8 @@
 
 import Phaser from 'phaser';
 
+const BATTLEFIELD_TILE_TEXTURE_KEY = 'battlefield_ground_tile';
+
 export class BootScene extends Phaser.Scene {
   constructor() {
     super({ key: 'BootScene' });
@@ -46,6 +48,7 @@ export class BootScene extends Phaser.Scene {
 
     this.load.image('tank_body_base', '/assets/sprites/tank_body_base.png');
     this.load.image('tank_turret_base', '/assets/sprites/tank_turret_base.png');
+    this.load.image(BATTLEFIELD_TILE_TEXTURE_KEY, '/assets/tiles/ground_tile_01.png');
 
     // Since we're using graphics for sprites, we just need a short delay
     // to ensure everything is ready
